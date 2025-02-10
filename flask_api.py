@@ -502,7 +502,7 @@ def save_issue():
 
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO issues (content, created_at) VALUES (%s, %s)", (issue_text, datetime.now()))
+        cursor.execute("INSERT INTO issues (content, created_at, resolved) VALUES (%s, %s, FALSE)", (issue_text, datetime.now()))
         conn.commit()
         cursor.close()
         conn.close()
@@ -516,30 +516,29 @@ def save_issue():
 def get_issues():
     """
     해결되지 않은 이슈 목록 조회 API
-    ---
-    tags:
-      - Issues
-    responses:
-      200:
-        description: 해결되지 않은 이슈 목록 반환
-      500:
-        description: 서버 오류
     """
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, content, created_at FROM issues WHERE resolved = FALSE ORDER BY created_at DESC")
+
+        cursor.execute("SELECT id, content, created_at, resolved FROM issues ORDER BY created_at DESC")
         issues = cursor.fetchall()
+
         cursor.close()
         conn.close()
 
+        logging.info(f"📌 조회된 이슈 개수: {len(issues)}")  # ✅ 로그 추가
+        logging.info(f"📌 이슈 데이터: {issues}")  # ✅ 디버깅용 로그 추가
+
         return jsonify({
             "success": True,
-            "data": [{"id": row[0], "content": row[1], "created_at": row[2]} for row in issues]
+            "data": [{"id": row[0], "content": row[1], "created_at": row[2], "resolved": row[3]} for row in issues]
         }), 200
+
     except Exception as e:
-        logging.error("Error retrieving issues", exc_info=True)
-        return jsonify({"success": False, "message": "이슈 조회 실패"}), 500
+        logging.error("❌ 이슈 목록 조회 실패", exc_info=True)
+        return jsonify({"success": False, "message": f"이슈 목록을 불러오는 중 오류 발생: {str(e)}"}), 500
+
 
 # 이슈에 대한 댓글 달기
 @app.route('/issues/comments', methods=['POST'])
@@ -593,7 +592,7 @@ def add_issue_comment():
         logging.error("Error saving issue comment", exc_info=True)
         return jsonify({"success": False, "message": "댓글 저장 실패"}), 500
 
-# 이슈에 대한 댓글 달기
+# 이슈에 대한 댓글 조회
 @app.route('/issues/comments', methods=['GET'])
 def get_issue_comments():
     """
@@ -815,6 +814,68 @@ def get_unchecked_descriptions():
     except Exception as e:
         logging.error("Error fetching unchecked descriptions", exc_info=True)
         return jsonify({"success": False, "message": "Failed to fetch unchecked descriptions"}), 500
+
+
+@app.route('/irregular_tasks', methods=['GET'])
+def get_irregular_tasks():
+    """
+    비정기 업무 체크리스트 조회 API
+    ---
+    tags:
+      - Irregular Tasks
+    responses:
+      200:
+        description: 비정기 업무 리스트 반환
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, task_name, is_checked FROM irregular_tasks ORDER BY created_at DESC')
+        tasks = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "data": [{"id": t[0], "task_name": t[1], "is_checked": t[2]} for t in tasks]
+        }), 200
+    except Exception as e:
+        logging.error("비정기 업무 조회 오류", exc_info=True)
+        return jsonify({"success": False, "message": "비정기 업무 조회 실패"}), 500
+
+
+@app.route('/irregular_tasks', methods=['POST'])
+def save_irregular_tasks():
+    """
+    비정기 업무 체크리스트 상태 업데이트 API (여러 개 한 번에 저장)
+    """
+    try:
+        data = request.json
+        updates = data.get('updates')
+
+        if not updates:
+            return jsonify({"success": False, "message": "No data provided"}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        for update in updates:
+            task_id = update.get("id")
+            is_checked = update.get("is_checked")
+
+            cursor.execute(
+                'UPDATE irregular_tasks SET is_checked = %s WHERE id = %s',
+                (is_checked, task_id)
+            )
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({"success": True, "message": "비정기 업무 체크리스트 저장 완료!"}), 201
+    except Exception as e:
+        logging.error("비정기 업무 체크리스트 저장 오류", exc_info=True)
+        return jsonify({"success": False, "message": "비정기 업무 체크리스트 저장 실패"}), 500
 
 
 

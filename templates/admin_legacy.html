@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>관리자 대시보드</title>
+  <style>
+    body { font-family: Arial, sans-serif; }
+    section { margin-bottom: 20px; padding: 10px; border: 1px solid #ddd; }
+    .section-title { font-weight: bold; margin-bottom: 5px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px 12px; border: 1px solid #ddd; text-align: center; }
+    textarea { width: 100%; height: 100px; padding: 10px; border: 1px solid #ddd; }
+    .comment-box { margin-top: 10px; }
+    .comment-box textarea { width: 100%; height: 50px; }
+    .comment-item { border-left: 3px solid #ddd; padding-left: 10px; margin-top: 5px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>관리자 대시보드</h1>
+
+  <!-- 업무 현황 테이블 -->
+  <section id="task-status-section">
+    <div class="section-title">업무 현황</div>
+    <table>
+      <thead>
+        <tr>
+          <th>과정</th>
+          <th>업무 완료율</th>
+          <th>긴급업무</th>
+          <th>상태</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>데이터 분석 스쿨</td>
+          <td>80%</td>
+          <td>긴급</td>
+          <td>진행 중</td>
+        </tr>
+        <tr>
+          <td>클라우드 스쿨</td>
+          <td>60%</td>
+          <td>일반</td>
+          <td>대기 중</td>
+        </tr>
+        <tr>
+          <td>게임 스쿨</td>
+          <td>50%</td>
+          <td>긴급</td>
+          <td>진행 중</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 전달사항 텍스트 입력란 -->
+  <section id="remarks-section">
+    <div class="section-title">전달사항</div>
+    <textarea id="remarks" placeholder="여기에 전달사항을 적어주세요."></textarea>
+    <button onclick="saveRemarks()">저장</button>
+  </section>
+
+  <!-- 이슈사항 표시 섹션 -->
+  <section id="issue-display-section">
+    <div class="section-title">이슈사항 목록</div>
+    <div id="issue-list"></div>
+  </section>
+
+  <!-- 비정기 업무 체크리스트 표시 섹션 -->
+  <section id="admin-irregular-tasks-section">
+    <div class="section-title">비정기 업무 체크리스트 (관리자)</div>
+    <div id="admin-irregular-task-list"></div>
+  </section>
+
+  <!-- 미체크 항목 설명 표시 섹션 -->
+  <section id="unchecked-description-display-section">
+    <div class="section-title">미체크 항목 설명</div>
+    <div id="unchecked-descriptions"></div>
+  </section>
+
+  <script>
+    async function saveRemarks() {
+      const remarks = document.getElementById('remarks').value;
+
+      if (!remarks) {
+        alert("전달사항을 입력해주세요.");
+        return;
+      }
+
+      try {
+        const response = await fetch('/remarks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ remarks })  
+        });
+        
+        const result = await response.json();
+        if (response.ok && result.success) {
+          alert('전달사항이 저장되었습니다.');
+        } else {
+          alert('전달사항 저장에 실패했습니다.');
+        }
+      } catch (error) {
+        console.error("Error saving remarks:", error);
+        alert('서버에 오류가 발생했습니다.');
+      }
+    }
+
+    async function fetchIssues() {
+    try {
+        console.log("📌 /issues API 호출 시작"); // ✅ 요청 시작 로그 추가
+        const response = await fetch('/issues');
+
+        if (!response.ok) throw new Error(`❌ HTTP 오류! 상태 코드: ${response.status}`);
+
+        const result = await response.json();
+        console.log("✅ /issues API 응답 데이터:", result); // ✅ API 응답 데이터 확인
+
+        if (result.success && result.data.length > 0) {
+            const issueListDiv = document.getElementById('issue-list');
+            issueListDiv.innerHTML = "";
+
+            result.data.forEach(issue => {
+                const issueItem = document.createElement('div');
+                issueItem.innerHTML = `
+                    <p><strong>이슈:</strong> ${issue.content}</p>
+                    <small>작성일: ${new Date(issue.created_at).toLocaleString()}</small>
+                    <button onclick="resolveIssue(${issue.id})">해결</button>
+                    <div id="comments-${issue.id}" class="comments-section"></div>
+                    <div class="comment-box">
+                        <textarea id="comment-text-${issue.id}" placeholder="댓글을 입력하세요"></textarea>
+                        <button onclick="addComment(${issue.id})">댓글 추가</button>
+                    </div>
+                    <hr>
+                `;
+                issueListDiv.appendChild(issueItem);
+                fetchComments(issue.id);
+            });
+
+            fetchAdminIrregularTasks();
+        } else {
+            console.warn("⚠️ 현재 등록된 이슈가 없습니다.");
+            document.getElementById('issue-list').innerText = "현재 등록된 이슈가 없습니다.";
+        }
+    } catch (error) {
+        console.error("❌ 이슈 목록 불러오기 오류:", error);
+        document.getElementById('issue-list').innerText = "이슈를 불러오는 중 오류 발생!";
+    }
+}
+    async function fetchUncheckedDescriptions() {
+      try {
+        const response = await fetch('/unchecked_descriptions');
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+
+        const result = await response.json();
+        console.log("미체크 항목 응답:", result); // 디버깅용 로그
+
+        if (result.success && result.data.length > 0) {
+          const descriptionsDiv = document.getElementById('unchecked-descriptions');
+          descriptionsDiv.innerHTML = "";
+
+          result.data.forEach((desc, index) => {
+            const descItem = document.createElement('div');
+            descItem.innerHTML = `<p><strong>${index + 1}. </strong>${desc}</p>`;
+            descriptionsDiv.appendChild(descItem);
+          });
+        } else {
+          document.getElementById('unchecked-descriptions').innerText = "미체크 항목 설명이 없습니다.";
+        }
+      } catch (error) {
+        console.error("미체크 항목 불러오기 오류:", error);
+        document.getElementById('unchecked-descriptions').innerText = "데이터를 불러오는 중 오류가 발생했습니다.";
+      }
+    }
+
+    // 초기 데이터 로딩
+    fetchIssues();
+    fetchUncheckedDescriptions();
+  </script>
+</body>
+</html>
