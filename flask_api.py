@@ -51,8 +51,6 @@ def check_login(username, password):
 def healthcheck():
     return jsonify({"status": "ok", "message": "Service is running!"}), 200
 
-if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=10000)
 
 # 로그인 페이지 및 처리
 @app.route('/login', methods=['GET', 'POST'])
@@ -182,17 +180,6 @@ def get_attendance():
         # ✅ JSON 응답 (기본값)
         if format_type == 'json':
             return jsonify({"success": True, "data": df.to_dict(orient='records')}), 200
-
-        # # ✅ CSV 파일 다운로드
-        # elif format_type == 'csv':
-        #     output = io.StringIO()
-        #     df.to_csv(output, index=False, encoding='utf-8-sig')
-        #     output.seek(0)
-        #     return Response(
-        #         output,
-        #         mimetype="text/csv",
-        #         headers={"Content-Disposition": "attachment; filename=출퇴근_기록.csv"}
-        #     )
 
         # ✅ Excel 파일 다운로드
         elif format_type == 'excel':
@@ -694,35 +681,6 @@ def resolve_issue():
         logging.error("Error resolving issue", exc_info=True)
         return jsonify({"success": False, "message": "이슈 해결 실패"}), 500
 
-# @app.route('/issues', methods=['GET'])
-# def get_issues():
-#     """
-#     해결되지 않은 이슈 목록 조회 API
-#     ---
-#     tags:
-#       - Issues
-#     responses:
-#       200:
-#         description: 해결되지 않은 이슈 목록 반환
-#       500:
-#         description: 서버 오류
-#     """
-#     try:
-#         conn = get_db_connection()
-#         cursor = conn.cursor()
-#         cursor.execute("SELECT id, content, created_at FROM issues WHERE resolved = FALSE ORDER BY created_at DESC")
-#         issues = cursor.fetchall()
-#         cursor.close()
-#         conn.close()
-
-#         return jsonify({
-#             "success": True,
-#             "data": [{"id": row[0], "content": row[1], "created_at": row[2]} for row in issues]
-#         }), 200
-#     except Exception as e:
-#         logging.error("Error retrieving issues", exc_info=True)
-#         return jsonify({"success": False, "message": "이슈 조회 실패"}), 500
-
 
 # ✅ 미체크 항목 설명 저장
 @app.route('/unchecked_descriptions', methods=['POST'])
@@ -859,4 +817,4 @@ def get_unchecked_descriptions():
 # ------------------- API 엔드포인트 문서화 끝 -------------------
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host="0.0.0.0", port=10000)
