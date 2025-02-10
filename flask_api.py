@@ -496,21 +496,29 @@ def save_issue():
     try:
         data = request.json
         issue_text = data.get('issue')
+        training_course = data.get('training_course')
+        date = data.get('date')
 
-        if not issue_text:
-            return jsonify({"success": False, "message": "이슈 내용을 입력하세요."}), 400
+        if not issue_text or not training_course or not date:
+            return jsonify({"success": False, "message": "이슈, 훈련 과정, 날짜를 모두 입력하세요."}), 400
 
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO issues (content, created_at, resolved) VALUES (%s, %s, FALSE)", (issue_text, datetime.now()))
+        cursor.execute('''
+            INSERT INTO issues (content, date, training_course, created_at, resolved)
+            VALUES (%s, %s, %s, NOW(), FALSE)
+        ''', (issue_text, date, training_course))
+
         conn.commit()
         cursor.close()
         conn.close()
 
-        return jsonify({"success": True, "message": "이슈 사항이 저장되었습니다."}), 201
+        return jsonify({"success": True, "message": "이슈가 저장되었습니다."}), 201
     except Exception as e:
         logging.error("Error saving issue", exc_info=True)
-        return jsonify({"success": False, "message": "이슈 사항 저장 실패"}), 500
+        return jsonify({"success": False, "message": "이슈 저장 실패"}), 500
+
+
 
 @app.route('/issues', methods=['GET'])
 def get_issues():
@@ -521,23 +529,37 @@ def get_issues():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT id, content, created_at, resolved FROM issues ORDER BY created_at DESC")
+        # cursor.execute('''
+        #     SELECT id, content, date, training_course, created_at, resolved 
+        #     FROM issues ORDER BY created_at DESC
+        # ''')
+        cursor.execute('''
+            SELECT id, content, date, training_course, created_at, resolved 
+            FROM issues
+            WHERE resolved = False
+        ''')
         issues = cursor.fetchall()
 
         cursor.close()
         conn.close()
 
-        logging.info(f"📌 조회된 이슈 개수: {len(issues)}")  # ✅ 로그 추가
-        logging.info(f"📌 이슈 데이터: {issues}")  # ✅ 디버깅용 로그 추가
-
         return jsonify({
             "success": True,
-            "data": [{"id": row[0], "content": row[1], "created_at": row[2], "resolved": row[3]} for row in issues]
+            "data": [
+                {
+                    "id": row[0],
+                    "content": row[1],
+                    "date": row[2],
+                    "training_course": row[3],
+                    "created_at": row[4],
+                    "resolved": row[5]
+                }
+                for row in issues
+            ]
         }), 200
-
     except Exception as e:
         logging.error("❌ 이슈 목록 조회 실패", exc_info=True)
-        return jsonify({"success": False, "message": f"이슈 목록을 불러오는 중 오류 발생: {str(e)}"}), 500
+        return jsonify({"success": False, "message": "이슈 목록을 불러오는 중 오류 발생"}), 500
 
 
 # 이슈에 대한 댓글 달기
@@ -819,35 +841,36 @@ def get_unchecked_descriptions():
 @app.route('/irregular_tasks', methods=['GET'])
 def get_irregular_tasks():
     """
-    비정기 업무 체크리스트 조회 API
-    ---
-    tags:
-      - Irregular Tasks
-    responses:
-      200:
-        description: 비정기 업무 리스트 반환
+    비정기 업무 체크리스트 조회 API (가장 최근 상태만 반환)
     """
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT id, task_name, is_checked FROM irregular_tasks ORDER BY created_at DESC')
+
+        cursor.execute('''
+            SELECT DISTINCT ON (task_name) id, task_name, is_checked, checked_date
+            FROM irregular_tasks
+            ORDER BY task_name, checked_date DESC
+        ''')
         tasks = cursor.fetchall()
         cursor.close()
         conn.close()
 
         return jsonify({
             "success": True,
-            "data": [{"id": t[0], "task_name": t[1], "is_checked": t[2]} for t in tasks]
+            "data": [{"id": t[0], "task_name": t[1], "is_checked": t[2], "checked_date": t[3]} for t in tasks]
         }), 200
     except Exception as e:
         logging.error("비정기 업무 조회 오류", exc_info=True)
         return jsonify({"success": False, "message": "비정기 업무 조회 실패"}), 500
 
 
+
 @app.route('/irregular_tasks', methods=['POST'])
 def save_irregular_tasks():
     """
-    비정기 업무 체크리스트 상태 업데이트 API (여러 개 한 번에 저장)
+    비정기 업무 체크리스트 추가 저장 API
+    기존 데이터를 덮어씌우지 않고 새로운 체크 상태를 추가
     """
     try:
         data = request.json
@@ -860,23 +883,22 @@ def save_irregular_tasks():
         cursor = conn.cursor()
 
         for update in updates:
-            task_id = update.get("id")
-            is_checked = update.get("is_checked")
+            task_name = update.get("task_name")
+            is_checked = update.get("is_checked")  # True/False 값
 
-            cursor.execute(
-                'UPDATE irregular_tasks SET is_checked = %s WHERE id = %s',
-                (is_checked, task_id)
-            )
+            cursor.execute('''
+                INSERT INTO irregular_tasks (task_name, is_checked, checked_date)
+                VALUES (%s, %s, NOW())
+            ''', (task_name, is_checked))
 
         conn.commit()
         cursor.close()
         conn.close()
 
-        return jsonify({"success": True, "message": "비정기 업무 체크리스트 저장 완료!"}), 201
+        return jsonify({"success": True, "message": "비정기 업무 체크리스트가 저장되었습니다!"}), 201
     except Exception as e:
         logging.error("비정기 업무 체크리스트 저장 오류", exc_info=True)
         return jsonify({"success": False, "message": "비정기 업무 체크리스트 저장 실패"}), 500
-
 
 
 # ------------------- API 엔드포인트 문서화 끝 -------------------

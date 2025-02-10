@@ -368,94 +368,136 @@
     let irregularTaskSelections = {}; // 비정기 업무 체크 상태 저장 객체
 
     async function fetchIrregularTasks() {
-        try {
-            const response = await fetch('/irregular_tasks');
-            const result = await response.json();
-            if (result.success) {
-                const taskListDiv = document.getElementById('irregular-task-list');
-                taskListDiv.innerHTML = ""; // 기존 목록 초기화
-                irregularTaskSelections = {}; // 체크 상태 초기화
+      try {
+          const response = await fetch('/irregular_tasks');
+          const result = await response.json();
 
-                result.data.forEach(task => {
-                    const taskItem = document.createElement('div');
-                    const checkbox = document.createElement('input');
-                    checkbox.type = "checkbox";
-                    checkbox.checked = task.is_checked;
-                    checkbox.dataset.taskId = task.id;
-                    checkbox.onchange = () => irregularTaskSelections[task.id] = checkbox.checked;
+          if (result.success) {
+              const taskListDiv = document.getElementById('irregular-task-list');
+              taskListDiv.innerHTML = ""; // 기존 목록 초기화
 
-                    const label = document.createElement('label');
-                    label.textContent = task.task_name;
-                    label.style.marginLeft = "5px";
+              result.data.forEach(task => {
+                  const taskItem = document.createElement('div');
+                  const checkbox = document.createElement('input');
+                  checkbox.type = "checkbox";
+                  checkbox.checked = task.is_checked;
+                  checkbox.dataset.taskName = task.task_name; // ✅ task_name을 dataset에 추가
 
-                    taskItem.appendChild(checkbox);
-                    taskItem.appendChild(label);
-                    taskListDiv.appendChild(taskItem);
+                  const label = document.createElement('label');
+                  label.textContent = `${task.task_name} (${task.checked_date})`;
+                  label.style.marginLeft = "5px";
 
-                    // 초기 체크 상태 저장
-                    irregularTaskSelections[task.id] = task.is_checked;
-                });
-            }
-        } catch (error) {
-            console.error("비정기 업무 로드 오류:", error);
-        }
-    }
+                  taskItem.appendChild(checkbox);
+                  taskItem.appendChild(label);
+                  taskListDiv.appendChild(taskItem);
+              });
+          }
+      } catch (error) {
+          console.error("비정기 업무 로드 오류:", error);
+      }
+  }
 
-    async function saveIrregularTaskSelections() {
-        const updates = Object.keys(irregularTaskSelections).map(taskId => ({
-            id: taskId,
-            is_checked: irregularTaskSelections[taskId]
-        }));
 
-        try {
-            const response = await fetch('/irregular_tasks', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ updates })
-            });
-            const result = await response.json();
-            if (result.success) {
-                alert("비정기 업무 체크리스트가 저장되었습니다.");
-                fetchIrregularTasks(); // 저장 후 최신 체크리스트로 갱신
-            } else {
-                alert("비정기 업무 체크리스트 저장에 실패했습니다.");
-            }
-        } catch (error) {
-            alert("서버 오류: " + error);
-        }
-    }
+    //   async function fetchIrregularTasks() {
+  //     try {
+  //         const response = await fetch('/irregular_tasks');
+  //         const result = await response.json();
 
-    // 페이지 로드 시 체크리스트 불러오기
+  //         if (result.success) {
+  //             const taskListDiv = document.getElementById('irregular-task-list');
+  //             taskListDiv.innerHTML = ""; // 기존 목록 초기화
+
+  //             result.data.forEach(task => {
+  //                 const taskItem = document.createElement('div');
+  //                 const checkbox = document.createElement('input');
+  //                 checkbox.type = "checkbox";
+  //                 checkbox.checked = task.is_checked;
+  //                 checkbox.dataset.taskName = task.task_name;
+
+  //                 const label = document.createElement('label');
+  //                 label.textContent = `${task.task_name} (${task.checked_date})`;
+  //                 label.style.marginLeft = "5px";
+
+  //                 taskItem.appendChild(checkbox);
+  //                 taskItem.appendChild(label);
+  //                 taskListDiv.appendChild(taskItem);
+  //             });
+  //         }
+  //     } catch (error) {
+  //         console.error("비정기 업무 로드 오류:", error);
+  //     }
+  // }
+  // 페이지 로드 시 체크리스트 불러오기
     fetchIrregularTasks();
 
-    
-// 이슈사항 저장 함수
-    async function saveIssue() {
-      const issueText = document.getElementById('issue-text').value;
 
-      if (!issueText) {
-        alert("이슈 사항을 입력하세요.");
-        return;
+    async function saveIrregularTaskSelections() {
+      const updates = [];
+      document.querySelectorAll('#irregular-task-list input[type="checkbox"]').forEach((checkbox) => {
+          updates.push({
+              task_name: checkbox.dataset.taskName,
+              is_checked: checkbox.checked
+          });
+      });
+
+      if (updates.length === 0) {
+          alert("저장할 항목이 없습니다.");
+          return;
       }
 
       try {
-        const response = await fetch('/issues', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ issue: issueText })
-        });
+          const response = await fetch('/irregular_tasks', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ updates })
+          });
 
-        const result = await response.json();
-        if (result.success) {
-          alert("이슈 사항이 저장되었습니다.");
-          document.getElementById('issue-text').value = ""; // 입력란 초기화
-        } else {
-          alert("이슈 사항 저장에 실패했습니다.");
-        }
+          const result = await response.json();
+          if (result.success) {
+              alert("비정기 업무 체크리스트가 저장되었습니다!");
+              fetchIrregularTasks(); // 저장 후 최신 데이터 갱신
+          } else {
+              alert("비정기 업무 체크리스트 저장 실패!");
+          }
       } catch (error) {
-        alert("서버 오류: " + error);
+          alert("서버 오류: " + error);
       }
-    }
+  }
+
+    
+// 이슈사항 저장 함수
+  async function saveIssue() {
+      const issueText = document.getElementById('issue-text').value;
+      const date = document.getElementById('global-date').value;
+      const trainingCourse = document.getElementById('training-course').value;
+
+      if (!issueText || !date || !trainingCourse) {
+          alert("이슈 사항, 날짜, 훈련 과정을 입력하세요.");
+          return;
+      }
+
+      try {
+          const response = await fetch('/issues', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  issue: issueText,
+                  date: date,
+                  training_course: trainingCourse
+              })
+          });
+
+          const result = await response.json();
+          if (result.success) {
+              alert("이슈가 저장되었습니다.");
+              document.getElementById('issue-text').value = ""; // 입력 초기화
+          } else {
+              alert("이슈 저장 실패: " + result.message);
+          }
+      } catch (error) {
+          alert("오류 발생: " + error);
+      }
+  }
 
       // ✅ 미체크 항목 설명 저장 함수
   async function saveUncheckedDescription() {
