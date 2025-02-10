@@ -20,11 +20,17 @@ app.config['SWAGGER'] = {
 }
 swagger = Swagger(app)  # Flasgger 초기화
 
-# PostgreSQL 데이터베이스 연결 함수 (docker-compose.yml에서 전달한 DATABASE_URL 사용)
+# PostgreSQL 데이터베이스 연결 함수
 def get_db_connection():
-    DATABASE_URL = os.environ.get('DATABASE_URL')
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    
+    # 환경 변수가 없으면 강제 설정
+    if not DATABASE_URL:
+        DATABASE_URL = "postgresql://cysss:QJxyP6VuLMAZykzMyeRtO3QJUGMf0aWA@dpg-cuim9pogph6c73acoj0g-a/mvp_dashboard"
+    
     conn = psycopg2.connect(DATABASE_URL)
     return conn
+
 
 # 사용자 로그인 검증 함수 (users 테이블에서 username과 password 확인)
 def check_login(username, password):
@@ -39,6 +45,14 @@ def check_login(username, password):
     except Exception as e:
         logging.error("Error checking login", exc_info=True)
         return False
+
+# healthcheck 라우트 -> DB 확인하기 위함
+@app.route('/healthcheck', methods=['GET'])
+def healthcheck():
+    return jsonify({"status": "ok", "message": "Service is running!"}), 200
+
+if __name__ == '__main__':
+    app.run(host="0.0.0.0", port=10000)
 
 # 로그인 페이지 및 처리
 @app.route('/login', methods=['GET', 'POST'])
