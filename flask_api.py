@@ -3,6 +3,7 @@ import pandas as pd
 from flask import Flask, Response, request, jsonify, render_template, redirect, send_file, url_for, session, flash
 from flask_cors import CORS  # CORS 추가
 from flasgger import Swagger
+from dotenv import load_dotenv
 import os, psycopg2
 import logging
 from datetime import datetime
@@ -20,11 +21,14 @@ app.config['SWAGGER'] = {
 }
 swagger = Swagger(app)  # Flasgger 초기화
 
+# ✅ .env 파일에서 환경 변수 로드
+load_dotenv()
+
 # PostgreSQL 데이터베이스 연결 함수
 def get_db_connection():
-    DATABASE_URL = os.getenv("DATABASE_URL")
+    DATABASE_URL = os.getenv("DATABASE_URL")  # ✅ 환경 변수 읽기
     
-    # 환경 변수가 없으면 강제 설정
+    # 환경 변수가 없으면 강제 설정 (백업용, 하지만 로컬에서는 .env가 있으므로 필요 없음)
     if not DATABASE_URL:
         DATABASE_URL = "postgresql://cysss:QJxyP6VuLMAZykzMyeRtO3QJUGMf0aWA@dpg-cuim9pogph6c73acoj0g-a/mvp_dashboard"
     
