@@ -2,7 +2,7 @@ import io
 import pandas as pd
 from flask import Flask, Response, request, jsonify, render_template, redirect, send_file, url_for, session, flash
 from flask_cors import CORS  # CORS 추가
-from flasgger import Swagger
+from flasgger import Swagger, swag_from
 from dotenv import load_dotenv
 import os, psycopg2
 import logging
@@ -49,15 +49,42 @@ def check_login(username, password):
     except Exception as e:
         logging.error("Error checking login", exc_info=True)
         return False
+    
+
+# ------------------- Views / Auth -------------------
+
 
 # healthcheck 라우트 -> DB 확인하기 위함
 @app.route('/healthcheck', methods=['GET'])
+@swag_from({
+    'tags': ['System'],
+    'summary': '서버 상태 확인',
+    'responses': {
+        200: {
+            'description': '서버가 정상적으로 작동함',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'status': {'type': 'string'},
+                    'message': {'type': 'string'}
+                }
+            }
+        }
+    }
+})
 def healthcheck():
     return jsonify({"status": "ok", "message": "Service is running!"}), 200
 
 
 # 로그인 페이지 및 처리
 @app.route('/login', methods=['GET', 'POST'])
+@swag_from({
+    'tags': ['Auth'],
+    'summary': '로그인 페이지 (HTML 반환)',
+    'responses': {
+        200: {'description': '로그인 페이지 HTML'}
+    }
+})
 def login():
     if request.method == 'POST':
         username = request.form.get('username')
@@ -73,33 +100,58 @@ def login():
 
 # 로그아웃 기능
 @app.route('/logout')
+@swag_from({
+    'tags': ['Auth'],
+    'summary': '로그아웃 (세션 종료)',
+    'responses': {
+        302: {'description': '로그인 페이지로 리다이렉트'}
+    }
+})
 def logout():
     session.pop('user', None)
     return redirect(url_for('login'))
 
 # 홈 화면 (로그인 후 접근 가능한 사원 관리 화면)
-@app.route('/')
+@app.route('/', methods=['GET'])
+@swag_from({
+    'tags': ['Views'],
+    'summary': '홈 화면 (로그인 후 리다이렉트)',
+    'responses': {
+        302: {'description': 'front_for_pro 페이지로 리다이렉트'}
+    }
+})
 def home():
     if 'user' not in session:
         return redirect(url_for('login'))
     return redirect(url_for('front_for_pro'))
 
 # front_for_pro 페이지
-@app.route('/front_for_pro')
+@app.route('/front_for_pro', methods=['GET'])
+@swag_from({
+    'tags': ['Views'],
+    'summary': '프론트 엔드 개발자용 대시보드 화면 (HTML 반환)',
+    'responses': {
+        200: {'description': 'front_for_pro.html 페이지 HTML'}
+    }
+})
 def front_for_pro():
     if 'user' not in session:
         return redirect(url_for('login'))
     return render_template('front_for_pro.html')
 
 # admin 페이지
-@app.route('/admin')
+@app.route('/admin', methods=['GET'])
+@swag_from({
+    'tags': ['Views'],
+    'summary': '관리자 대시보드 (HTML 반환)',
+    'responses': {
+        200: {'description': 'admin.html 페이지 HTML'}
+    }
+})
 def admin():
     if 'user' not in session:
         return redirect(url_for('login'))
     return render_template('admin.html')
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
 
 # ------------------- API 엔드포인트 문서화 시작 -------------------
 
@@ -524,6 +576,37 @@ def save_issue():
 def get_issues():
     """
     해결되지 않은 이슈 목록 조회 API
+    ---
+    tags:
+      - Issues
+    summary: "해결되지 않은 이슈 목록을 조회합니다."
+    responses:
+      200:
+        description: 해결되지 않은 이슈 목록 반환
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  content:
+                    type: string
+                  date:
+                    type: string
+                  training_course:
+                    type: string
+                  created_at:
+                    type: string
+                  resolved:
+                    type: boolean
+      500:
+        description: 이슈 목록 조회 실패
     """
     try:
         conn = get_db_connection()
@@ -622,6 +705,7 @@ def get_issue_comments():
     ---
     tags:
       - Issues
+    summary: "특정 이슈에 대한 댓글 목록을 조회합니다."
     parameters:
       - name: issue_id
         in: query
@@ -631,8 +715,24 @@ def get_issue_comments():
     responses:
       200:
         description: 이슈사항의 댓글 목록 반환
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  comment:
+                    type: string
+                  created_at:
+                    type: string
       500:
-        description: 서버 오류
+        description: 댓글 조회 실패
     """
     try:
         issue_id = request.args.get('issue_id')
@@ -666,6 +766,7 @@ def resolve_issue():
     ---
     tags:
       - Issues
+    summary: "특정 이슈를 해결 처리합니다."
     parameters:
       - in: body
         name: body
@@ -682,7 +783,7 @@ def resolve_issue():
       400:
         description: 요청 데이터 오류
       500:
-        description: 서버 오류
+        description: 이슈 해결 실패
     """
     try:
         data = request.json
@@ -715,10 +816,11 @@ def save_unchecked_description():
     ---
     tags:
       - Unchecked Descriptions
+    summary: "미체크된 항목에 대한 설명을 저장합니다."
     parameters:
       - in: body
         name: body
-        description: 미체크된 항목에 대한 설명을 JSON 형식으로 전달
+        description: "미체크된 항목에 대한 설명을 JSON 형식으로 전달"
         required: true
         schema:
           type: object
@@ -742,26 +844,8 @@ def save_unchecked_description():
               example: "Unchecked description saved successfully!"
       400:
         description: 설명이 제공되지 않음
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              example: false
-            message:
-              type: string
-              example: "No description provided"
       500:
-        description: 서버 오류
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              example: false
-            message:
-              type: string
-              example: "Failed to save unchecked description"
+        description: 미체크 항목 설명 저장 실패
     """
     try:
         data = request.json
@@ -842,6 +926,33 @@ def get_unchecked_descriptions():
 def get_irregular_tasks():
     """
     비정기 업무 체크리스트 조회 API (가장 최근 상태만 반환)
+    ---
+    tags:
+      - Irregular Tasks
+    summary: "비정기 업무 체크리스트의 가장 최근 상태를 조회합니다."
+    responses:
+      200:
+        description: 비정기 업무 체크리스트 조회 성공
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  task_name:
+                    type: string
+                  is_checked:
+                    type: boolean
+                  checked_date:
+                    type: string
+      500:
+        description: 비정기 업무 조회 실패
     """
     try:
         conn = get_db_connection()
@@ -871,6 +982,32 @@ def save_irregular_tasks():
     """
     비정기 업무 체크리스트 추가 저장 API
     기존 데이터를 덮어씌우지 않고 새로운 체크 상태를 추가
+    ---
+    tags:
+      - Irregular Tasks
+    summary: "비정기 업무 체크리스트 업데이트 데이터를 저장합니다."
+    parameters:
+      - in: body
+        name: body
+        description: "저장할 비정기 업무 체크리스트 업데이트 데이터"
+        required: true
+        schema:
+          type: object
+          properties:
+            updates:
+              type: array
+              items:
+                type: object
+                properties:
+                  task_name:
+                    type: string
+                  is_checked:
+                    type: boolean
+    responses:
+      201:
+        description: 비정기 업무 체크리스트 저장 성공
+      500:
+        description: 비정기 업무 체크리스트 저장 실패
     """
     try:
         data = request.json
