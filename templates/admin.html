@@ -97,6 +97,11 @@
     <div id="issue-list"></div>
   </section>
 
+  <section id="issue-download-section">
+    <div class="section-title">이슈사항 다운로드</div>
+    <button onclick="downloadIssues()">Excel 다운로드</button>
+  </section>
+
   <script>
     async function resolveIssue(issueId) {
         try {
@@ -201,6 +206,25 @@
     }
 
     fetchIssues();
+  
+    async function downloadIssues() {
+      try {
+        const response = await fetch('/issues/download');
+        if (!response.ok) throw new Error('이슈 다운로드 실패');
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "이슈사항.xlsx";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch (error) {
+        console.error("다운로드 오류:", error);
+        alert("이슈사항 다운로드에 실패했습니다.");
+      }
+    }
   </script>
 
   <!-- 미체크 항목 설명 표시 섹션 -->

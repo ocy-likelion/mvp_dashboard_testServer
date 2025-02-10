@@ -807,6 +807,48 @@ def resolve_issue():
         logging.error("Error resolving issue", exc_info=True)
         return jsonify({"success": False, "message": "이슈 해결 실패"}), 500
 
+# 이슈사항 전체 다운로드
+@app.route('/issues/download', methods=['GET'])
+def download_issues():
+    """
+    이슈사항을 Excel 파일로 다운로드하는 API
+    ---
+    tags:
+      - Issues
+    responses:
+      200:
+        description: 이슈사항을 Excel 파일로 다운로드
+      500:
+        description: 이슈사항 다운로드 실패
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT id, content, date, training_course, created_at, resolved FROM issues")
+        issues = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        # DataFrame 생성
+        columns = ["ID", "이슈 내용", "날짜", "훈련 과정", "생성일", "해결됨"]
+        df = pd.DataFrame(issues, columns=columns)
+
+        # Excel 파일 생성
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name="이슈사항")
+        output.seek(0)
+
+        return send_file(
+            output,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name="이슈사항.xlsx"
+        )
+    except Exception as e:
+        logging.error("이슈사항 다운로드 실패", exc_info=True)
+        return jsonify({"success": False, "message": "이슈 다운로드 실패"}), 500
 
 # ✅ 미체크 항목 설명 저장
 @app.route('/unchecked_descriptions', methods=['POST'])
