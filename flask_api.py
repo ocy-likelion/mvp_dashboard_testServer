@@ -650,16 +650,27 @@ def get_issues():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # cursor.execute('''
-        #     SELECT id, content, date, training_course, created_at, resolved 
-        #     FROM issues ORDER BY created_at DESC
-        # ''')
         cursor.execute('''
-            SELECT id, content, date, training_course, created_at, resolved 
-            FROM issues
-            WHERE resolved = False
+            SELECT training_course, json_agg(json_build_object(
+                'id', i.id, 
+                'content', i.content, 
+                'date', i.date, 
+                'created_at', i.created_at, 
+                'resolved', i.resolved,
+                'comments', (
+                    SELECT json_agg(json_build_object(
+                        'id', ic.id, 
+                        'comment', ic.comment, 
+                        'created_at', ic.created_at
+                    )) FROM issue_comments ic WHERE ic.issue_id = i.id
+                )
+            )) AS issues
+            FROM issues i
+            WHERE i.resolved = FALSE  
+            GROUP BY training_course
+            ORDER BY MIN(i.created_at) DESC;
         ''')
-        issues = cursor.fetchall()
+        issues_grouped = cursor.fetchall()
 
         cursor.close()
         conn.close()
@@ -667,19 +678,11 @@ def get_issues():
         return jsonify({
             "success": True,
             "data": [
-                {
-                    "id": row[0],
-                    "content": row[1],
-                    "date": row[2],
-                    "training_course": row[3],
-                    "created_at": row[4],
-                    "resolved": row[5]
-                }
-                for row in issues
+                {"training_course": row[0], "issues": row[1]} for row in issues_grouped
             ]
         }), 200
     except Exception as e:
-        logging.error("❌ 이슈 목록 조회 실패", exc_info=True)
+        logging.error("Error retrieving issues", exc_info=True)
         return jsonify({"success": False, "message": "이슈 목록을 불러오는 중 오류 발생"}), 500
 
 
@@ -888,116 +891,6 @@ def download_issues():
         logging.error("이슈사항 다운로드 실패", exc_info=True)
         return jsonify({"success": False, "message": "이슈 다운로드 실패"}), 500
 
-# ✅ 미체크 항목 설명 저장
-@app.route('/unchecked_descriptions', methods=['POST'])
-def save_unchecked_description():
-    """
-    미체크 항목 설명 저장 API
-    ---
-    tags:
-      - Unchecked Descriptions
-    parameters:
-      - in: body
-        name: body
-        description: "미체크된 항목에 대한 설명과 훈련과정명을 JSON 형식으로 전달"
-        required: true
-        schema:
-          type: object
-          required:
-            - description
-            - training_course
-          properties:
-            description:
-              type: string
-              example: "출석 체크 시스템 오류로 인해 확인 불가"
-            training_course:
-              type: string
-              example: "데이터 분석 스쿨 100기"
-    responses:
-      201:
-        description: 미체크 항목 설명 저장 성공
-      400:
-        description: 설명 또는 과정이 제공되지 않음
-      500:
-        description: 미체크 항목 설명 저장 실패
-    """
-    try:
-        data = request.json
-        description = data.get("description", "").strip()
-        training_course = data.get("training_course", "").strip()
-
-        if not description or not training_course:
-            return jsonify({"success": False, "message": "설명과 훈련과정명을 모두 입력하세요."}), 400
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        cursor.execute('''
-            INSERT INTO unchecked_descriptions (content, training_course, created_at)
-            VALUES (%s, %s, NOW())
-        ''', (description, training_course))
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        return jsonify({"success": True, "message": "미체크 항목 설명이 저장되었습니다!"}), 201
-    except Exception as e:
-        logging.error("Error saving unchecked description", exc_info=True)
-        return jsonify({"success": False, "message": "Failed to save unchecked description"}), 500
-
-
-
-# ✅ 미체크 항목 설명 불러오기
-@app.route('/unchecked_descriptions', methods=['GET'])
-def get_unchecked_descriptions():
-    """
-    미체크 항목 설명 조회 API
-    ---
-    tags:
-      - Unchecked Descriptions
-    responses:
-      200:
-        description: 저장된 미체크 항목 설명 목록 조회 성공
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              example: true
-            data:
-              type: array
-              items:
-                type: object
-                properties:
-                  content:
-                    type: string
-                  training_course:
-                    type: string
-                  created_at:
-                    type: string
-      500:
-        description: 서버 오류
-    """
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        cursor.execute('SELECT content, training_course, created_at FROM unchecked_descriptions ORDER BY created_at DESC')
-        descriptions = cursor.fetchall()
-
-        cursor.close()
-        conn.close()
-
-        return jsonify({
-            "success": True,
-            "data": [{"content": row[0], "training_course": row[1], "created_at": row[2]} for row in descriptions]
-        })
-    except Exception as e:
-        logging.error("Error fetching unchecked descriptions", exc_info=True)
-        return jsonify({"success": False, "message": "Failed to fetch unchecked descriptions"}), 500
-
-
 
 @app.route('/irregular_tasks', methods=['GET'])
 def get_irregular_tasks():
@@ -1113,6 +1006,268 @@ def save_irregular_tasks():
     except Exception as e:
         logging.error("비정기 업무 체크리스트 저장 오류", exc_info=True)
         return jsonify({"success": False, "message": "비정기 업무 체크리스트 저장 실패"}), 500
+
+
+@app.route('/training_info', methods=['POST'])
+def save_training_info():
+    """
+    훈련 과정 정보 저장 API
+    ---
+    tags:
+      - Training Info
+    parameters:
+      - in: body
+        name: body
+        description: "훈련 과정 정보를 JSON 형식으로 전달"
+        required: true
+        schema:
+          type: object
+          required:
+            - training_course
+            - start_date
+            - end_date
+            - dept
+          properties:
+            training_course:
+              type: string
+              example: "데이터 분석 스쿨 100기"
+            start_date:
+              type: string
+              format: date
+              example: "2025-01-02"
+            end_date:
+              type: string
+              format: date
+              example: "2025-06-01"
+            dept:
+              type: string
+              example: "TechSol"
+    responses:
+      201:
+        description: 훈련 과정 저장 성공
+      400:
+        description: 필수 필드 누락
+      500:
+        description: 훈련 과정 저장 실패
+    """
+    try:
+        data = request.json
+        training_course = data.get("training_course", "").strip()
+        start_date = data.get("start_date", "").strip()
+        end_date = data.get("end_date", "").strip()
+        dept = data.get("dept", "").strip()
+
+        if not training_course or not start_date or not end_date or not dept:
+            return jsonify({"success": False, "message": "모든 필드를 입력하세요."}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            INSERT INTO training_info (training_course, start_date, end_date, dept)
+            VALUES (%s, %s, %s, %s)
+        ''', (training_course, start_date, end_date, dept))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({"success": True, "message": "훈련 과정이 저장되었습니다!"}), 201
+    except Exception as e:
+        logging.error("Error saving training info", exc_info=True)
+        return jsonify({"success": False, "message": "Failed to save training info"}), 500
+
+
+@app.route('/training_info', methods=['GET'])
+def get_training_info():
+    """
+    훈련 과정 목록 조회 API
+    ---
+    tags:
+      - Training Info
+    responses:
+      200:
+        description: 저장된 훈련 과정 목록 반환
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  training_course:
+                    type: string
+                  start_date:
+                    type: string
+                  end_date:
+                    type: string
+                  dept:
+                    type: string
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('SELECT training_course, start_date, end_date, dept FROM training_info ORDER BY start_date DESC')
+        courses = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "data": [
+                {"training_course": row[0], "start_date": row[1], "end_date": row[2], "dept": row[3]}
+                for row in courses
+            ]
+        })
+    except Exception as e:
+        logging.error("Error fetching training info", exc_info=True)
+        return jsonify({"success": False, "message": "Failed to fetch training info"}), 500
+
+
+# ✅ 미체크 항목 불러오기
+@app.route('/unchecked_descriptions', methods=['GET'])
+def get_unchecked_descriptions():
+    """
+    미체크 항목 설명 목록 조회 API (훈련과정별 그룹화)
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT training_course, json_agg(json_build_object(
+                'id', ud.id, 
+                'content', ud.content, 
+                'created_at', ud.created_at, 
+                'resolved', ud.resolved,
+                'comments', (
+                    SELECT json_agg(json_build_object(
+                        'id', uc.id, 
+                        'comment', uc.comment, 
+                        'created_at', uc.created_at
+                    )) FROM unchecked_comments uc WHERE uc.unchecked_id = ud.id
+                )
+            )) AS unchecked_items
+            FROM unchecked_descriptions ud
+            WHERE ud.resolved = FALSE  
+            GROUP BY training_course
+            ORDER BY MIN(ud.created_at) DESC;
+        ''')
+        unchecked_grouped = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "data": [
+                {"training_course": row[0], "unchecked_items": row[1]} for row in unchecked_grouped
+            ]
+        }), 200
+    except Exception as e:
+        logging.error("Error retrieving unchecked descriptions", exc_info=True)
+        return jsonify({"success": False, "message": "미체크 항목 목록을 불러오는 중 오류 발생"}), 500
+
+    
+# 미체크 항목 저장
+@app.route('/unchecked_descriptions', methods=['POST'])
+def save_unchecked_description():
+    """
+    미체크 항목 설명 저장 API
+    """
+    try:
+        # 🛠 요청에서 JSON 데이터를 가져오도록 수정
+        if not request.is_json:
+            return jsonify({"success": False, "message": "Invalid JSON format"}), 400
+
+        data = request.get_json()
+
+        description = data.get("description", "").strip()
+        training_course = data.get("training_course", "").strip()
+
+        # 🛠 필수 필드 검증
+        if not description or not training_course:
+            return jsonify({"success": False, "message": "설명과 훈련과정명을 모두 입력하세요."}), 400
+
+        # 🛠 DB 연결 및 INSERT 수행
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            INSERT INTO unchecked_descriptions (content, training_course, created_at, resolved)
+            VALUES (%s, %s, NOW(), FALSE)
+        ''', (description, training_course))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({"success": True, "message": "미체크 항목 설명이 저장되었습니다!"}), 201
+
+    except Exception as e:
+        logging.error("Error saving unchecked description", exc_info=True)
+        return jsonify({"success": False, "message": "서버 오류 발생"}), 500
+
+
+
+# ✅ 미체크 항목 댓글 저장
+@app.route('/unchecked_comments', methods=['POST'])
+def add_unchecked_comment():
+    """
+    미체크 항목에 댓글 추가 API
+    """
+    try:
+        data = request.json
+        unchecked_id = data.get('unchecked_id')
+        comment = data.get('comment')
+
+        if not unchecked_id or not comment:
+            return jsonify({"success": False, "message": "미체크 항목 ID와 댓글을 입력하세요."}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO unchecked_comments (unchecked_id, comment, created_at) VALUES (%s, %s, NOW())",
+            (unchecked_id, comment)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({"success": True, "message": "댓글이 저장되었습니다."}), 201
+    except Exception as e:
+        logging.error("Error saving unchecked comment", exc_info=True)
+        return jsonify({"success": False, "message": "댓글 저장 실패"}), 500
+
+
+@app.route('/unchecked_descriptions/resolve', methods=['POST'])
+def resolve_unchecked_description():
+    """
+    미체크 항목 해결 API (resolved=True로 변경)
+    """
+    try:
+        data = request.json
+        unchecked_id = data.get('unchecked_id')
+
+        if not unchecked_id:
+            return jsonify({"success": False, "message": "미체크 항목 ID가 필요합니다."}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE unchecked_descriptions SET resolved = TRUE WHERE id = %s", (unchecked_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({"success": True, "message": "미체크 항목이 해결되었습니다."}), 200
+    except Exception as e:
+        logging.error("Error resolving unchecked description", exc_info=True)
+        return jsonify({"success": False, "message": "미체크 항목 해결 실패"}), 500
 
 
 # ------------------- API 엔드포인트 문서화 끝 -------------------

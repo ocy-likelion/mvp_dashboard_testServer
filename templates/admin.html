@@ -54,6 +54,93 @@
     </table>
   </section>
 
+  <section id="training-course-section">
+    <div class="section-title">훈련 과정 정보 입력</div>
+    <label for="new-training-course">훈련과정명:</label>
+    <input type="text" id="new-training-course" placeholder="훈련과정명 입력">
+  
+    <label for="start-date">시작 날짜:</label>
+    <input type="date" id="start-date">
+  
+    <label for="end-date">종료 날짜:</label>
+    <input type="date" id="end-date">
+  
+    <label for="dept">부서:</label>
+    <input type="text" id="dept" placeholder="부서 입력">
+  
+    <button onclick="saveTrainingCourse()">저장</button>
+  </section>
+  
+  <script>
+    async function saveTrainingCourse() {
+      const trainingCourse = document.getElementById('new-training-course').value.trim();
+      const startDate = document.getElementById('start-date').value;
+      const endDate = document.getElementById('end-date').value;
+      const dept = document.getElementById('dept').value.trim();
+  
+      if (!trainingCourse || !startDate || !endDate || !dept) {
+        alert("모든 필드를 입력해주세요.");
+        return;
+      }
+  
+      try {
+        const response = await fetch('/training_info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            training_course: trainingCourse, 
+            start_date: startDate, 
+            end_date: endDate, 
+            dept: dept 
+          })
+        });
+  
+        const result = await response.json();
+        if (result.success) {
+          alert("훈련 과정이 저장되었습니다!");
+          document.getElementById('new-training-course').value = "";
+          document.getElementById('start-date').value = "";
+          document.getElementById('end-date').value = "";
+          document.getElementById('dept').value = "";
+        } else {
+          alert("저장 실패: " + result.message);
+        }
+      } catch (error) {
+        alert("서버 오류: " + error);
+      }
+    }
+  </script>
+  
+  <section id="training-info-list">
+    <div class="section-title">저장된 훈련 과정 목록</div>
+    <div id="training-course-list"></div>
+  </section>
+  
+  <script>
+    async function fetchTrainingInfo() {
+      try {
+        const response = await fetch('/training_info');
+        const result = await response.json();
+  
+        if (result.success) {
+          const listDiv = document.getElementById('training-course-list');
+          listDiv.innerHTML = "";
+  
+          result.data.forEach(course => {
+            const item = document.createElement('p');
+            item.textContent = `[${course.dept}] ${course.training_course} (${course.start_date} ~ ${course.end_date})`;
+            listDiv.appendChild(item);
+          });
+        }
+      } catch (error) {
+        console.error("훈련 과정 목록 조회 오류:", error);
+      }
+    }
+  
+    fetchTrainingInfo();
+  </script>
+  
+
   <!-- 전달사항 텍스트 입력란 -->
   <section id="remarks-section">
     <div class="section-title">전달사항</div>
@@ -93,7 +180,7 @@
 
   <!-- 이슈사항 표시 섹션 -->
   <section id="issue-display-section">
-    <div class="section-title">이슈사항 목록</div>
+    <div class="section-title">이슈사항 목록 (훈련과정별)</div>
     <div id="issue-list"></div>
   </section>
 
@@ -124,36 +211,49 @@
     }
 
     async function fetchIssues() {
-        try {
-            const response = await fetch('/issues');
-            const result = await response.json();
+      try {
+        const response = await fetch('/issues');
+        const result = await response.json();
 
-            if (result.success) {
-                const issueListDiv = document.getElementById('issue-list');
-                issueListDiv.innerHTML = "";
+        if (result.success) {
+          const issueListDiv = document.getElementById('issue-list');
+          issueListDiv.innerHTML = "";
 
-                result.data.forEach(issue => {
-                    const issueItem = document.createElement('div');
-                    issueItem.innerHTML = `
-                        <p><strong>이슈:</strong> ${issue.content}</p>
-                        <small>작성일: ${issue.created_at}</small>
-                        <button onclick="resolveIssue(${issue.id})">해결</button>
-                        <div id="comments-${issue.id}" class="comments-section"></div>
-                        <div class="comment-box">
-                            <textarea id="comment-text-${issue.id}" placeholder="댓글을 입력하세요"></textarea>
-                            <button onclick="addComment(${issue.id})">댓글 추가</button>
-                        </div>
-                        <hr>
-                    `;
-                    issueListDiv.appendChild(issueItem);
-                    fetchComments(issue.id);
-                });
-            } else {
-                document.getElementById('issue-list').innerText = "이슈사항을 불러오지 못했습니다.";
-            }
-        } catch (error) {
-            document.getElementById('issue-list').innerText = "오류 발생: " + error;
+          result.data.forEach(group => {
+            const groupDiv = document.createElement('div');
+            groupDiv.innerHTML = `<h3>${group.training_course}</h3>`;
+            
+            group.issues.forEach(issue => {
+              const issueItem = document.createElement('div');
+              issueItem.innerHTML = `
+                <p>${issue.content} <small>(${issue.created_at})</small></p>
+                <button onclick="resolveIssue(${issue.id})">해결</button>
+                <div id="comments-${issue.id}" class="comments-section"></div>
+                <textarea id="comment-text-${issue.id}" placeholder="댓글을 입력하세요"></textarea>
+                <button onclick="addIssueComment(${issue.id})">댓글 추가</button>
+                <hr>
+              `;
+              groupDiv.appendChild(issueItem);
+              fetchIssueComments(issue.id, issue.comments);
+            });
+
+            issueListDiv.appendChild(groupDiv);
+          });
         }
+      } catch (error) {
+        console.error("이슈 목록 불러오기 오류:", error);
+      }
+    }
+
+    async function fetchIssueComments(issueId, comments) {
+      const commentsDiv = document.getElementById(`comments-${issueId}`);
+      commentsDiv.innerHTML = "";
+
+      comments.forEach(comment => {
+        const commentItem = document.createElement('div');
+        commentItem.innerHTML = `<strong>관리자:</strong> ${comment.comment} <small>(${comment.created_at})</small>`;
+        commentsDiv.appendChild(commentItem);
+      });
     }
 
     async function fetchComments(issueId) {
@@ -232,29 +332,102 @@
     <div class="section-title">미체크 항목 설명</div>
     <div id="unchecked-descriptions"></div>
   </section>
-
+  
   <script>
-  async function fetchUncheckedDescriptions() {
-    try {
-      const response = await fetch('/unchecked_descriptions');
-      const result = await response.json();
+    async function fetchUncheckedDescriptions() {
+      try {
+        const response = await fetch('/unchecked_descriptions');
+        const result = await response.json();
 
-      if (result.success) {
-        const descriptionsDiv = document.getElementById('unchecked-descriptions');
-        descriptionsDiv.innerHTML = "";  
+        if (result.success) {
+          const descriptionsDiv = document.getElementById('unchecked-descriptions');
+          descriptionsDiv.innerHTML = "";
 
-        result.data.forEach((desc, index) => {
-          const descItem = document.createElement('div');
-          descItem.innerHTML = `<p><strong>${index + 1}. [${desc.training_course}]</strong> ${desc.content} <small>(${desc.created_at})</small></p>`;
-          descriptionsDiv.appendChild(descItem);
-        });
+          result.data.forEach(group => {
+            const groupDiv = document.createElement('div');
+            groupDiv.innerHTML = `<h3>${group.training_course}</h3>`;
+
+            group.unchecked_items.forEach(item => {
+              const itemDiv = document.createElement('div');
+              itemDiv.innerHTML = `
+                <p>${item.content} <small>(${item.created_at})</small></p>
+                <button onclick="resolveUncheckedDescription(${item.id})">해결</button>
+                <div id="comments-${item.id}" class="comments-section"></div>
+                <textarea id="comment-text-${item.id}" placeholder="댓글을 입력하세요"></textarea>
+                <button onclick="addUncheckedComment(${item.id})">댓글 추가</button>
+                <hr>
+              `;
+              groupDiv.appendChild(itemDiv);
+              fetchUncheckedComments(item.id, item.comments);
+            });
+
+            descriptionsDiv.appendChild(groupDiv);
+          });
+        }
+      } catch (error) {
+        console.error("미체크 항목 불러오기 오류:", error);
       }
-    } catch (error) {
-      console.error("오류 발생:", error);
     }
-  }
 
-  fetchUncheckedDescriptions();  // 페이지 로드 시 실행
+    async function fetchUncheckedComments(uncheckedId, comments) {
+      const commentsDiv = document.getElementById(`comments-${uncheckedId}`);
+      commentsDiv.innerHTML = "";
+
+      comments.forEach(comment => {
+        const commentItem = document.createElement('div');
+        commentItem.innerHTML = `<strong>관리자:</strong> ${comment.comment} <small>(${comment.created_at})</small>`;
+        commentsDiv.appendChild(commentItem);
+      });
+    }
+
+    fetchUncheckedDescriptions();
+  
+    async function addUncheckedComment(uncheckedId) {
+      const commentText = document.getElementById(`comment-text-${uncheckedId}`).value.trim();
+  
+      if (!commentText) {
+        alert("댓글을 입력하세요.");
+        return;
+      }
+  
+      try {
+        const response = await fetch('/unchecked_comments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ unchecked_id: uncheckedId, comment: commentText })
+        });
+  
+        const result = await response.json();
+        if (result.success) {
+          alert("댓글이 추가되었습니다.");
+          document.getElementById(`comment-text-${uncheckedId}`).value = "";
+          fetchUncheckedDescriptions();
+        }
+      } catch (error) {
+        alert("오류 발생: " + error);
+      }
+    }
+  
+    async function resolveUncheckedDescription(uncheckedId) {
+      try {
+        const response = await fetch('/unchecked_descriptions/resolve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ unchecked_id: uncheckedId })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          alert("미체크 항목이 해결되었습니다.");
+          fetchUncheckedDescriptions();  // 목록 갱신
+        }
+      } catch (error) {
+        alert("오류 발생: " + error);
+      }
+    }
+  
+    fetchUncheckedDescriptions();
   </script>
+  
 </body>
 </html>
