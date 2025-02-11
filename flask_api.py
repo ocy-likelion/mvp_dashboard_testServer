@@ -202,6 +202,44 @@ def get_notices():
         logging.error("Error retrieving notices", exc_info=True)
         return jsonify({"success": False, "message": "Failed to retrieve notices"}), 500
 
+# 과정명 선택할 수 있는 드롭다운 설정
+@app.route('/training_courses', methods=['GET'])
+def get_training_courses():
+    """
+    training_info 테이블에서 training_course 목록을 가져오는 API
+    ---
+    tags:
+      - Training Info
+    responses:
+      200:
+        description: 훈련과정 목록 반환
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            data:
+              type: array
+              items:
+                type: string
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT training_course FROM training_info ORDER BY start_date DESC")
+        courses = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "data": [course[0] for course in courses]  # 리스트 형태로 반환
+        }), 200
+    except Exception as e:
+        logging.error("Error fetching training courses", exc_info=True)
+        return jsonify({"success": False, "message": "Failed to fetch training courses"}), 500
+
+
 @app.route('/attendance', methods=['GET'])
 def get_attendance():
     """
@@ -858,60 +896,56 @@ def save_unchecked_description():
     ---
     tags:
       - Unchecked Descriptions
-    summary: "미체크된 항목에 대한 설명을 저장합니다."
     parameters:
       - in: body
         name: body
-        description: "미체크된 항목에 대한 설명을 JSON 형식으로 전달"
+        description: "미체크된 항목에 대한 설명과 훈련과정명을 JSON 형식으로 전달"
         required: true
         schema:
           type: object
           required:
             - description
+            - training_course
           properties:
             description:
               type: string
               example: "출석 체크 시스템 오류로 인해 확인 불가"
+            training_course:
+              type: string
+              example: "데이터 분석 스쿨 100기"
     responses:
       201:
         description: 미체크 항목 설명 저장 성공
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              example: true
-            message:
-              type: string
-              example: "Unchecked description saved successfully!"
       400:
-        description: 설명이 제공되지 않음
+        description: 설명 또는 과정이 제공되지 않음
       500:
         description: 미체크 항목 설명 저장 실패
     """
     try:
         data = request.json
-        description = data.get("description", "")
+        description = data.get("description", "").strip()
+        training_course = data.get("training_course", "").strip()
 
-        if not description:
-            return jsonify({"success": False, "message": "No description provided"}), 400
+        if not description or not training_course:
+            return jsonify({"success": False, "message": "설명과 훈련과정명을 모두 입력하세요."}), 400
 
         conn = get_db_connection()
         cursor = conn.cursor()
 
         cursor.execute('''
-            INSERT INTO unchecked_descriptions (content, created_at)
-            VALUES (%s, NOW())
-        ''', (description,))
+            INSERT INTO unchecked_descriptions (content, training_course, created_at)
+            VALUES (%s, %s, NOW())
+        ''', (description, training_course))
 
         conn.commit()
         cursor.close()
         conn.close()
 
-        return jsonify({"success": True, "message": "Unchecked description saved successfully!"}), 201
+        return jsonify({"success": True, "message": "미체크 항목 설명이 저장되었습니다!"}), 201
     except Exception as e:
         logging.error("Error saving unchecked description", exc_info=True)
         return jsonify({"success": False, "message": "Failed to save unchecked description"}), 500
+
 
 
 # ✅ 미체크 항목 설명 불러오기
@@ -934,34 +968,35 @@ def get_unchecked_descriptions():
             data:
               type: array
               items:
-                type: string
-              example: ["출석 체크 시스템 오류로 인해 확인 불가", "네트워크 문제로 인한 미체크"]
+                type: object
+                properties:
+                  content:
+                    type: string
+                  training_course:
+                    type: string
+                  created_at:
+                    type: string
       500:
         description: 서버 오류
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              example: false
-            message:
-              type: string
-              example: "Failed to fetch unchecked descriptions"
     """
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        cursor.execute('SELECT content FROM unchecked_descriptions ORDER BY created_at DESC')
+        cursor.execute('SELECT content, training_course, created_at FROM unchecked_descriptions ORDER BY created_at DESC')
         descriptions = cursor.fetchall()
 
         cursor.close()
         conn.close()
 
-        return jsonify({"success": True, "data": [desc[0] for desc in descriptions]})  # ✅ 데이터를 리스트로 변환하여 반환
+        return jsonify({
+            "success": True,
+            "data": [{"content": row[0], "training_course": row[1], "created_at": row[2]} for row in descriptions]
+        })
     except Exception as e:
         logging.error("Error fetching unchecked descriptions", exc_info=True)
         return jsonify({"success": False, "message": "Failed to fetch unchecked descriptions"}), 500
+
 
 
 @app.route('/irregular_tasks', methods=['GET'])

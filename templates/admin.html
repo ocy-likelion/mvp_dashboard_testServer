@@ -234,27 +234,27 @@
   </section>
 
   <script>
-    async function fetchUncheckedDescriptions() {
-      try {
-        const response = await fetch('/unchecked_descriptions');
-        const result = await response.json();
-        if (result.success) {
-          const descriptionsDiv = document.getElementById('unchecked-descriptions');
-          descriptionsDiv.innerHTML = "";
-          result.data.forEach((desc, index) => {
-            const descItem = document.createElement('div');
-            descItem.innerHTML = `<p><strong>${index + 1}. </strong>${desc}</p>`;
-            descriptionsDiv.appendChild(descItem);
-          });
-        } else {
-          document.getElementById('unchecked-descriptions').innerText = "미체크 항목 설명이 없습니다.";
-        }
-      } catch (error) {
-        console.error("오류 발생:", error);
-        document.getElementById('unchecked-descriptions').innerText = "데이터를 불러오는 중 오류가 발생했습니다.";
+  async function fetchUncheckedDescriptions() {
+    try {
+      const response = await fetch('/unchecked_descriptions');
+      const result = await response.json();
+
+      if (result.success) {
+        const descriptionsDiv = document.getElementById('unchecked-descriptions');
+        descriptionsDiv.innerHTML = "";  
+
+        result.data.forEach((desc, index) => {
+          const descItem = document.createElement('div');
+          descItem.innerHTML = `<p><strong>${index + 1}. [${desc.training_course}]</strong> ${desc.content} <small>(${desc.created_at})</small></p>`;
+          descriptionsDiv.appendChild(descItem);
+        });
       }
+    } catch (error) {
+      console.error("오류 발생:", error);
     }
-    fetchUncheckedDescriptions();
+  }
+
+  fetchUncheckedDescriptions();  // 페이지 로드 시 실행
   </script>
 </body>
 </html>

@@ -44,6 +44,11 @@
     </div>
   </section>
 
+  <select id="training-course">
+    <!-- 서버에서 데이터를 받아 동적으로 추가할 예정 -->
+  </select>
+  
+
   <!-- 전달사항 섹션 -->
   <section id="remarks-section">
     <div class="section-title">전달사항</div>
@@ -183,6 +188,36 @@
 
     // 페이지 로드 시 공지사항과 전달사항을 불러옴
     fetchNoticesAndRemarks();
+
+
+
+  async function fetchTrainingCourses() {
+    try {
+      const response = await fetch('/training_courses');  // Flask API 호출
+      const result = await response.json();
+
+      if (result.success) {
+        const trainingCourseSelect = document.getElementById('training-course');
+        trainingCourseSelect.innerHTML = ""; // 기존 옵션 초기화
+
+        result.data.forEach(course => {
+          const option = document.createElement('option');
+          option.value = course;
+          option.textContent = course;
+          trainingCourseSelect.appendChild(option);
+        });
+
+      } else {
+        console.error("훈련 과정 목록을 불러오지 못했습니다.");
+      }
+    } catch (error) {
+      console.error("훈련 과정 목록 가져오기 오류:", error);
+    }
+  }
+
+  // 페이지 로드 시 자동 실행
+  document.addEventListener("DOMContentLoaded", fetchTrainingCourses);
+
 
     // ✅ 교강사 1 출퇴근 기록 저장
     async function saveAttendance1() {
@@ -501,7 +536,8 @@
 
       // ✅ 미체크 항목 설명 저장 함수
   async function saveUncheckedDescription() {
-    const uncheckedDescription = document.getElementById('unchecked-description-text').value;
+    const uncheckedDescription = document.getElementById('unchecked-description-text').value.trim();
+    const trainingCourse = document.getElementById('training-course').value; // 현재 선택된 훈련 과정
 
     if (!uncheckedDescription) {
       alert("미체크 항목 설명을 입력하세요.");
@@ -512,7 +548,10 @@
       const response = await fetch('/unchecked_descriptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: uncheckedDescription })
+        body: JSON.stringify({ 
+          description: uncheckedDescription,
+          training_course: trainingCourse  // 추가된 필드
+        })
       });
 
       const result = await response.json();
@@ -520,7 +559,7 @@
         alert("미체크 항목 설명이 저장되었습니다.");
         document.getElementById('unchecked-description-text').value = ""; // 입력란 초기화
       } else {
-        alert("저장에 실패했습니다.");
+        alert("저장에 실패했습니다: " + result.message);
       }
     } catch (error) {
       alert("서버 오류: " + error);
