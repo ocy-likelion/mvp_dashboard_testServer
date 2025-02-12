@@ -25,34 +25,47 @@
     <table>
       <thead>
         <tr>
-          <th>과정</th>
-          <th>업무 완료율</th>
-          <th>긴급업무</th>
-          <th>상태</th>
+          <th>과정명</th>
+          <th>체크율</th>
+          <th>완수 여부</th>
         </tr>
       </thead>
-      <tbody>
-        <tr>
-          <td>데이터 분석 스쿨</td>
-          <td>80%</td>
-          <td>긴급</td>
-          <td>진행 중</td>
-        </tr>
-        <tr>
-          <td>클라우드 스쿨</td>
-          <td>60%</td>
-          <td>일반</td>
-          <td>대기 중</td>
-        </tr>
-        <tr>
-          <td>게임 스쿨</td>
-          <td>50%</td>
-          <td>긴급</td>
-          <td>진행 중</td>
-        </tr>
+      <tbody id="task-status-body">
+        <!-- 동적으로 데이터 추가 -->
       </tbody>
     </table>
   </section>
+
+  <script>
+    async function fetchTaskStatus() {
+      try {
+        const response = await fetch('/admin/task_status');
+        const result = await response.json();
+
+        if (result.success) {
+          const tableBody = document.getElementById('task-status-body');
+          tableBody.innerHTML = "";
+          
+          result.data.forEach(item => {
+            const completionStatus = item.check_rate === "100%" ? "완수" : "미완수";
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td>${item.training_course}</td>
+              <td>${item.check_rate}</td>
+              <td>${completionStatus}</td>
+            `;
+            tableBody.appendChild(row);
+          });
+        } else {
+          alert("업무 현황 데이터를 불러오는 데 실패했습니다.");
+        }
+      } catch (error) {
+        console.error("업무 현황 조회 오류:", error);
+      }
+    }
+    
+    fetchTaskStatus();
+  </script>
 
   <section id="training-course-section">
     <div class="section-title">훈련 과정 정보 입력</div>

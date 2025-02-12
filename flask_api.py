@@ -534,27 +534,30 @@ def save_tasks():
     """
     try:
         data = request.json
+        print("Received data:", data)
+
         updates = data.get("updates")
         training_course = data.get("training_course")
-        
+
         if not updates or not training_course:
             return jsonify({"success": False, "message": "No data provided"}), 400
-        
+
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         for update in updates:
             task_name = update.get("task_name")
             is_checked = update.get("is_checked")
+
             cursor.execute('''
                 INSERT INTO task_checklist (task_name, is_checked, checked_date, training_course)
                 VALUES (%s, %s, %s, %s)
             ''', (task_name, is_checked, datetime.now().strftime("%Y-%m-%d"), training_course))
-        
+
         conn.commit()
         cursor.close()
         conn.close()
-        
+
         return jsonify({"success": True, "message": "Tasks saved successfully!"}), 201
     except Exception as e:
         logging.error("Error saving tasks", exc_info=True)
@@ -1463,6 +1466,41 @@ def resolve_unchecked_description():
         logging.error("Error resolving unchecked description", exc_info=True)
         return jsonify({"success": False, "message": "미체크 항목 해결 실패"}), 500
 
+
+# 체크율 계산
+@app.route('/admin/task_status', methods=['GET'])
+def get_task_status():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT training_course, 
+                   COUNT(*) AS total_tasks, 
+                   SUM(CASE WHEN is_checked THEN 1 ELSE 0 END) AS checked_tasks
+            FROM task_checklist
+            GROUP BY training_course
+        ''')
+        results = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        task_status = []
+        for row in results:
+            training_course = row[0]
+            total_tasks = row[1]
+            checked_tasks = row[2] if row[2] else 0
+            check_rate = round((checked_tasks / total_tasks) * 100, 2) if total_tasks > 0 else 0
+            
+            task_status.append({
+                "training_course": training_course,
+                "check_rate": f"{check_rate}%"
+            })
+        
+        return jsonify({"success": True, "data": task_status}), 200
+    except Exception as e:
+        logging.error("Error retrieving task status", exc_info=True)
+        return jsonify({"success": False, "message": "Failed to retrieve task status"}), 500
 
 
 # ------------------- API 엔드포인트 문서화 끝 -------------------
