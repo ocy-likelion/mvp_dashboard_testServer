@@ -535,31 +535,31 @@ def save_tasks():
     try:
         data = request.json
         updates = data.get("updates")
-
-        if not updates:
+        training_course = data.get("training_course")
+        
+        if not updates or not training_course:
             return jsonify({"success": False, "message": "No data provided"}), 400
-
+        
         conn = get_db_connection()
         cursor = conn.cursor()
-
+        
         for update in updates:
             task_name = update.get("task_name")
-            is_checked = update.get("is_checked")  # True/False 값
-
-            # ✅ 기존 데이터를 유지하면서 새로운 체크 기록을 추가하는 방식
+            is_checked = update.get("is_checked")
             cursor.execute('''
-                INSERT INTO task_checklist (task_name, is_checked, checked_date)
-                VALUES (%s, %s, %s)
-            ''', (task_name, is_checked, datetime.now().strftime("%Y-%m-%d")))
-
+                INSERT INTO task_checklist (task_name, is_checked, checked_date, training_course)
+                VALUES (%s, %s, %s, %s)
+            ''', (task_name, is_checked, datetime.now().strftime("%Y-%m-%d"), training_course))
+        
         conn.commit()
         cursor.close()
         conn.close()
-
+        
         return jsonify({"success": True, "message": "Tasks saved successfully!"}), 201
     except Exception as e:
         logging.error("Error saving tasks", exc_info=True)
         return jsonify({"success": False, "message": "Failed to save tasks"}), 500
+
 
 @app.route('/remarks', methods=['POST'])
 def save_remarks():
@@ -1040,31 +1040,32 @@ def save_irregular_tasks():
     """
     try:
         data = request.json
-        updates = data.get('updates')
-
-        if not updates:
+        updates = data.get("updates")
+        training_course = data.get("training_course")
+        
+        if not updates or not training_course:
             return jsonify({"success": False, "message": "No data provided"}), 400
-
+        
         conn = get_db_connection()
         cursor = conn.cursor()
-
+        
         for update in updates:
             task_name = update.get("task_name")
-            is_checked = update.get("is_checked")  # True/False 값
-
+            is_checked = update.get("is_checked")
             cursor.execute('''
-                INSERT INTO irregular_tasks (task_name, is_checked, checked_date)
-                VALUES (%s, %s, NOW())
-            ''', (task_name, is_checked))
-
+                INSERT INTO irregular_tasks (task_name, is_checked, checked_date, training_course)
+                VALUES (%s, %s, NOW(), %s)
+            ''', (task_name, is_checked, training_course))
+        
         conn.commit()
         cursor.close()
         conn.close()
-
+        
         return jsonify({"success": True, "message": "비정기 업무 체크리스트가 저장되었습니다!"}), 201
     except Exception as e:
         logging.error("비정기 업무 체크리스트 저장 오류", exc_info=True)
         return jsonify({"success": False, "message": "비정기 업무 체크리스트 저장 실패"}), 500
+
 
 
 @app.route('/training_info', methods=['POST'])
