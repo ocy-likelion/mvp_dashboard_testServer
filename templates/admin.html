@@ -243,11 +243,21 @@
                 <button onclick="resolveIssue(${issue.id})">해결</button>
                 <div id="comments-${issue.id}" class="comments-section"></div>
                 <textarea id="comment-text-${issue.id}" placeholder="댓글을 입력하세요"></textarea>
-                <button onclick="addIssueComment(${issue.id})">댓글 추가</button>
+                <button onclick="addComment(${issue.id})">댓글 추가</button>
                 <hr>
               `;
+
+              // ✅ 댓글 표시 (이슈 데이터에서 바로 가져옴)
+              const commentsDiv = issueItem.querySelector(`#comments-${issue.id}`);
+              if (issue.comments) {
+                issue.comments.forEach(comment => {
+                  const commentItem = document.createElement('div');
+                  commentItem.innerHTML = `<strong>관리자:</strong> ${comment.comment} <small>(${comment.created_at})</small>`;
+                  commentsDiv.appendChild(commentItem);
+                });
+              }
+
               groupDiv.appendChild(issueItem);
-              fetchIssueComments(issue.id, issue.comments);
             });
 
             issueListDiv.appendChild(groupDiv);
@@ -257,6 +267,7 @@
         console.error("이슈 목록 불러오기 오류:", error);
       }
     }
+
 
     async function fetchIssueComments(issueId, comments) {
       const commentsDiv = document.getElementById(`comments-${issueId}`);
@@ -291,19 +302,19 @@
     }
 
     async function addComment(issueId) {
-      const commentText = document.getElementById(`comment-text-${issueId}`).value;
+        const commentText = document.getElementById(`comment-text-${issueId}`).value;
+        if (!commentText) {
+            alert("댓글을 입력하세요.");
+            return;
+        }
 
-      if (!commentText) {
-        alert("댓글을 입력하세요.");
-        return;
-      }
+        try {
+            const response = await fetch('/issues/comments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ issue_id: issueId, comment: commentText })  // ✅ issue_id 추가됨
+            });
 
-      try {
-        const response = await fetch('/issues/comments', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ issue_id: issueId, comment: commentText })
-        });
 
         const result = await response.json();
         if (result.success) {
@@ -370,8 +381,18 @@
                 <button onclick="addUncheckedComment(${item.id})">댓글 추가</button>
                 <hr>
               `;
+
+              // ✅ 댓글 표시 (API 응답에서 바로 가져옴)
+              const commentsDiv = itemDiv.querySelector(`#comments-${item.id}`);
+              if (item.comments) {
+                item.comments.forEach(comment => {
+                  const commentItem = document.createElement('div');
+                  commentItem.innerHTML = `<strong>관리자:</strong> ${comment.comment} <small>(${comment.created_at})</small>`;
+                  commentsDiv.appendChild(commentItem);
+                });
+              }
+
               groupDiv.appendChild(itemDiv);
-              fetchUncheckedComments(item.id, item.comments);
             });
 
             descriptionsDiv.appendChild(groupDiv);
