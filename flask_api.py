@@ -348,7 +348,7 @@ def get_attendance():
         logging.error("출퇴근 기록 조회 오류", exc_info=True)
         return jsonify({"success": False, "message": "출퇴근 기록 조회 실패"}), 500
 
-
+# 출퇴근 기록 저장
 @app.route('/attendance', methods=['POST'])
 def save_attendance():
     """
@@ -356,26 +356,36 @@ def save_attendance():
     ---
     tags:
       - Attendance
+    summary: 출퇴근 기록을 저장합니다.
+    description: 
+      - 강사명이 포함된 출퇴근 기록을 `attendance` 테이블에 저장합니다.
+      - `주강사`와 `보조강사`의 출퇴근 기록을 분리하여 저장합니다.
     parameters:
       - in: body
         name: body
-        description: 출퇴근 기록 데이터를 JSON 형식으로 전달
         required: true
         schema:
           type: object
           required:
             - date
             - instructor
+            - instructor_name
             - training_course
             - check_in
             - check_out
           properties:
             date:
               type: string
-              example: "2025-02-03"
+              format: date
+              example: "2025-02-12"
             instructor:
               type: string
               example: "1"
+              description: "1: 주강사, 2: 보조강사"
+            instructor_name:
+              type: string
+              example: "홍길동"
+              description: "강사 이름"
             training_course:
               type: string
               example: "데이터 분석 스쿨"
@@ -387,19 +397,13 @@ def save_attendance():
               example: "18:00"
             daily_log:
               type: boolean
-              example: false
+              example: true
+              description: "일지 작성 여부"
     responses:
       201:
         description: 출퇴근 기록 저장 성공
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-            message:
-              type: string
       400:
-        description: 필수 필드 누락
+        description: 필수 데이터 누락
       500:
         description: 출퇴근 기록 저장 실패
     """
@@ -410,20 +414,21 @@ def save_attendance():
 
         date = data.get('date')
         instructor = data.get('instructor')
+        instructor_name = data.get('instructor_name')  # ✅ 강사명 추가
         training_course = data.get('training_course')
         check_in = data.get('check_in')
         check_out = data.get('check_out')
         daily_log = data.get('daily_log', False)
 
-        if not date or not instructor or not training_course or not check_in or not check_out:
+        if not date or not instructor or not instructor_name or not training_course or not check_in or not check_out:
             return jsonify({"success": False, "message": "Missing required fields"}), 400
 
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO attendance (date, instructor, training_course, check_in, check_out, daily_log)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        ''', (date, instructor, training_course, check_in, check_out, daily_log))
+            INSERT INTO attendance (date, instructor, instructor_name, training_course, check_in, check_out, daily_log)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ''', (date, instructor, instructor_name, training_course, check_in, check_out, daily_log))
         conn.commit()
         cursor.close()
         conn.close()
@@ -432,6 +437,7 @@ def save_attendance():
     except Exception as e:
         logging.error("Error saving attendance", exc_info=True)
         return jsonify({"success": False, "message": "Failed to save attendance"}), 500
+
 
 @app.route('/tasks', methods=['GET'])
 def get_tasks():

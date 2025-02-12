@@ -57,43 +57,50 @@
     </div>
   </section>
 
-  <!-- 교강사 출퇴근 체크 섹션 (교강사 1) -->
   <section id="attendance-section-1">
     <div class="section-title">주강사 출퇴근 체크</div>
     <div class="input-group">
-      <label for="check-in-1">출근 시간:</label>
-      <input type="time" id="check-in-1">
+        <label for="instructor-name-1">강사명:</label>
+        <input type="text" id="instructor-name-1" placeholder="강사명을 입력하세요">
     </div>
     <div class="input-group">
-      <label for="check-out-1">퇴근 시간:</label>
-      <input type="time" id="check-out-1">
+        <label for="check-in-1">출근 시간:</label>
+        <input type="time" id="check-in-1">
     </div>
     <div class="input-group">
-      <label>
-        <input type="checkbox" id="daily-log-1"> 일지 작성 완료
-      </label>
+        <label for="check-out-1">퇴근 시간:</label>
+        <input type="time" id="check-out-1">
+    </div>
+    <div class="input-group">
+        <label>
+            <input type="checkbox" id="daily-log-1"> 일지 작성 완료
+        </label>
     </div>
     <button onclick="saveAttendance1()">주강사 출퇴근 기록 저장</button>
-  </section>
+</section>
 
-  <!-- 교강사 출퇴근 체크 섹션 (교강사 2) -->
-  <section id="attendance-section-2">
+<!-- 보조강사 출퇴근 체크 -->
+<section id="attendance-section-2">
     <div class="section-title">보조강사 출퇴근 체크</div>
     <div class="input-group">
-      <label for="check-in-2">출근 시간:</label>
-      <input type="time" id="check-in-2">
+        <label for="instructor-name-2">강사명:</label>
+        <input type="text" id="instructor-name-2" placeholder="강사명을 입력하세요">
     </div>
     <div class="input-group">
-      <label for="check-out-2">퇴근 시간:</label>
-      <input type="time" id="check-out-2">
+        <label for="check-in-2">출근 시간:</label>
+        <input type="time" id="check-in-2">
     </div>
     <div class="input-group">
-      <label>
-        <input type="checkbox" id="daily-log-2"> 일지 작성 완료
-      </label>
+        <label for="check-out-2">퇴근 시간:</label>
+        <input type="time" id="check-out-2">
+    </div>
+    <div class="input-group">
+        <label>
+            <input type="checkbox" id="daily-log-2"> 일지 작성 완료
+        </label>
     </div>
     <button onclick="saveAttendance2()">보조강사 출퇴근 기록 저장</button>
-  </section>
+</section>
 
 <!-- 출퇴근 기록 다운로드 섹션 -->
 <section id="attendance-download-section">
@@ -223,75 +230,79 @@
     async function saveAttendance1() {
       const globalDate = document.getElementById('global-date').value;
       const training_course = document.getElementById('training-course').value;
+      const instructor_name = document.getElementById('instructor-name-1').value.trim();
       const check_in = document.getElementById('check-in-1').value;
       const check_out = document.getElementById('check-out-1').value;
       const daily_log = document.getElementById('daily-log-1').checked;
 
-      if (!globalDate || !check_in || !check_out) {
-        alert("날짜, 출근, 퇴근 시간을 모두 입력해주세요.");
-        return;
+      if (!globalDate || !instructor_name || !check_in || !check_out) {
+          alert("날짜, 강사명, 출근, 퇴근 시간을 모두 입력해주세요.");
+          return;
       }
 
       try {
-        const response = await fetch('/attendance', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            date: globalDate, 
-            instructor: "1", 
-            training_course, 
-            check_in, 
-            check_out, 
-            daily_log 
-          })
-        });
-        const result = await response.json();
-        if(response.ok && result.success) {
-          alert("교강사 1 " + result.message);
-        } else {
-          alert("교강사 1 출퇴근 기록 저장에 실패했습니다.");
-        }
+          const response = await fetch('/attendance', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                  date: globalDate, 
+                  instructor: "1", 
+                  instructor_name,
+                  training_course, 
+                  check_in, 
+                  check_out, 
+                  daily_log 
+              })
+          });
+          const result = await response.json();
+          if (response.ok && result.success) {
+              alert("주강사 출퇴근 기록이 저장되었습니다.");
+          } else {
+              alert("출퇴근 기록 저장에 실패했습니다.");
+          }
       } catch (error) {
-        alert("오류 발생: " + error);
+          alert("오류 발생: " + error);
       }
-    }
+  }
 
     // ✅ 교강사 2 출퇴근 기록 저장
     async function saveAttendance2() {
       const globalDate = document.getElementById('global-date').value;
       const training_course = document.getElementById('training-course').value;
+      const instructor_name = document.getElementById('instructor-name-2').value.trim();
       const check_in = document.getElementById('check-in-2').value;
       const check_out = document.getElementById('check-out-2').value;
       const daily_log = document.getElementById('daily-log-2').checked;
 
-      if (!globalDate || !check_in || !check_out) {
-        alert("날짜, 출근, 퇴근 시간을 모두 입력해주세요.");
-        return;
+      if (!globalDate || !instructor_name || !check_in || !check_out) {
+          alert("날짜, 강사명, 출근, 퇴근 시간을 모두 입력해주세요.");
+          return;
       }
 
       try {
-        const response = await fetch('/attendance', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            date: globalDate, 
-            instructor: "2", 
-            training_course, 
-            check_in, 
-            check_out, 
-            daily_log 
-          })
-        });
-        const result = await response.json();
-        if(response.ok && result.success) {
-          alert("교강사 2 " + result.message);
-        } else {
-          alert("교강사 2 출퇴근 기록 저장에 실패했습니다.");
-        }
+          const response = await fetch('/attendance', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                  date: globalDate, 
+                  instructor: "2", 
+                  instructor_name,
+                  training_course, 
+                  check_in, 
+                  check_out, 
+                  daily_log 
+              })
+          });
+          const result = await response.json();
+          if (response.ok && result.success) {
+              alert("보조강사 출퇴근 기록이 저장되었습니다.");
+          } else {
+              alert("출퇴근 기록 저장에 실패했습니다.");
+          }
       } catch (error) {
-        alert("오류 발생: " + error);
+          alert("오류 발생: " + error);
       }
-    }
+  }
 
   // ✅ 출퇴근 기록 조회 및 다운로드 함수
   async function downloadAttendance(format) {
