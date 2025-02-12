@@ -1470,6 +1470,32 @@ def resolve_unchecked_description():
 # 체크율 계산
 @app.route('/admin/task_status', methods=['GET'])
 def get_task_status():
+        """
+    훈련 과정별 업무 체크리스트의 체크율을 조회하는 API
+    ---
+    tags:
+      - Admin
+    summary: "훈련 과정별 업무 체크 상태 조회"
+    responses:
+      200:
+        description: 훈련 과정별 체크율 데이터를 반환
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  training_course:
+                    type: string
+                  check_rate:
+                    type: string
+      500:
+        description: 체크 상태 조회 실패
+    """
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
