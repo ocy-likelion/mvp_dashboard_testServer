@@ -51,7 +51,7 @@ def check_login(username, password):
         return False
     
 
-# ------------------- Views / Auth -------------------
+# ------------------- API 엔드포인트 문서화 시작 -------------------
 
 
 # healthcheck 라우트 -> DB 확인하기 위함
@@ -78,14 +78,38 @@ def healthcheck():
 
 # 로그인 페이지 및 처리
 @app.route('/login', methods=['GET', 'POST'])
-@swag_from({
-    'tags': ['Auth'],
-    'summary': '로그인 페이지 (HTML 반환)',
-    'responses': {
-        200: {'description': '로그인 페이지 HTML'}
-    }
-})
 def login():
+    """
+    로그인 API
+    ---
+    tags:
+      - Auth
+    summary: 로그인 페이지 및 인증 처리
+    description: 
+      - **GET 요청**: 로그인 페이지 HTML을 반환합니다.  
+      - **POST 요청**: 입력한 사용자 정보를 검증하여 로그인 처리를 수행합니다.
+    parameters:
+      - in: body
+        name: body
+        required: false
+        description: 로그인 시 사용되는 사용자 정보 (POST 요청 시 필요)
+        schema:
+          type: object
+          properties:
+            username:
+              type: string
+              example: "admin"
+            password:
+              type: string
+              example: "password123"
+    responses:
+      200:
+        description: 로그인 페이지 HTML 반환 (GET 요청)
+      302:
+        description: 로그인 성공 시 홈 화면으로 리다이렉트
+      400:
+        description: 로그인 실패 - 잘못된 사용자 정보
+    """
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -98,62 +122,91 @@ def login():
     else:
         return render_template('login.html')
 
+
 # 로그아웃 기능
 @app.route('/logout')
-@swag_from({
-    'tags': ['Auth'],
-    'summary': '로그아웃 (세션 종료)',
-    'responses': {
-        302: {'description': '로그인 페이지로 리다이렉트'}
-    }
-})
 def logout():
+    """
+    로그아웃 API
+    ---
+    tags:
+      - Auth
+    summary: 현재 사용자의 세션을 종료하고 로그아웃합니다.
+    description: 
+      사용자의 로그인 세션을 삭제한 후 로그인 페이지로 리다이렉트합니다.
+    responses:
+      302:
+        description: 로그아웃 후 로그인 페이지로 리다이렉트
+    """
     session.pop('user', None)
     return redirect(url_for('login'))
 
+
 # 홈 화면 (로그인 후 접근 가능한 사원 관리 화면)
 @app.route('/', methods=['GET'])
-@swag_from({
-    'tags': ['Views'],
-    'summary': '홈 화면 (로그인 후 리다이렉트)',
-    'responses': {
-        302: {'description': 'front_for_pro 페이지로 리다이렉트'}
-    }
-})
 def home():
+    """
+    홈 화면 API
+    ---
+    tags:
+      - Views
+    summary: 홈 화면 접근
+    description: 
+      - 로그인한 사용자가 홈 화면으로 이동합니다.  
+      - 로그인하지 않은 경우 로그인 페이지로 리다이렉트됩니다.
+    responses:
+      302:
+        description: 로그인 상태 확인 후 리다이렉트 (로그인 페이지 또는 홈 화면)
+    """
     if 'user' not in session:
         return redirect(url_for('login'))
     return redirect(url_for('front_for_pro'))
 
 # front_for_pro 페이지
 @app.route('/front_for_pro', methods=['GET'])
-@swag_from({
-    'tags': ['Views'],
-    'summary': '프론트 엔드 개발자용 대시보드 화면 (HTML 반환)',
-    'responses': {
-        200: {'description': 'front_for_pro.html 페이지 HTML'}
-    }
-})
 def front_for_pro():
+    """
+    프론트엔드 개발자용 대시보드 API
+    ---
+    tags:
+      - Views
+    summary: 프론트엔드 개발자를 위한 대시보드 페이지 반환
+    description: 
+      사용자가 로그인한 경우 대시보드 페이지 (`front_for_pro.html`)을 반환합니다.
+      로그인하지 않은 경우 로그인 페이지로 이동됩니다.
+    responses:
+      200:
+        description: 대시보드 HTML 페이지 반환
+      302:
+        description: 로그인되지 않은 경우 로그인 페이지로 리다이렉트
+    """
     if 'user' not in session:
         return redirect(url_for('login'))
     return render_template('front_for_pro.html')
 
+
 # admin 페이지
 @app.route('/admin', methods=['GET'])
-@swag_from({
-    'tags': ['Views'],
-    'summary': '관리자 대시보드 (HTML 반환)',
-    'responses': {
-        200: {'description': 'admin.html 페이지 HTML'}
-    }
-})
 def admin():
+    """
+    관리자 대시보드 API
+    ---
+    tags:
+      - Views
+    summary: 관리자 대시보드 페이지 반환
+    description: 
+      사용자가 로그인한 경우 관리자 대시보드 (`admin.html`)을 반환합니다.  
+      로그인하지 않은 경우 로그인 페이지로 이동됩니다.
+    responses:
+      200:
+        description: 관리자 대시보드 HTML 페이지 반환
+      302:
+        description: 로그인되지 않은 경우 로그인 페이지로 리다이렉트
+    """
     if 'user' not in session:
         return redirect(url_for('login'))
     return render_template('admin.html')
 
-# ------------------- API 엔드포인트 문서화 시작 -------------------
 
 @app.route('/notices', methods=['GET'])
 def get_notices():
