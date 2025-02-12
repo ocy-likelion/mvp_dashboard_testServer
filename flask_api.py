@@ -1470,7 +1470,7 @@ def resolve_unchecked_description():
 # 체크율 계산
 @app.route('/admin/task_status', methods=['GET'])
 def get_task_status():
-        """
+    """
     훈련 과정별 업무 체크리스트의 체크율을 조회하는 API
     ---
     tags:
