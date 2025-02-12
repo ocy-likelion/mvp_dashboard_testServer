@@ -172,7 +172,7 @@ def front_for_pro():
       - Views
     summary: 프론트엔드 개발자를 위한 대시보드 페이지 반환
     description: 
-      사용자가 로그인한 경우 대시보드 페이지 (`front_for_pro.html`)을 반환합니다.
+      사용자가 로그인한 경우 대시보드 페이지 (front_for_pro.html)을 반환합니다.
       로그인하지 않은 경우 로그인 페이지로 이동됩니다.
     responses:
       200:
@@ -195,7 +195,7 @@ def admin():
       - Views
     summary: 관리자 대시보드 페이지 반환
     description: 
-      사용자가 로그인한 경우 관리자 대시보드 (`admin.html`)을 반환합니다.  
+      사용자가 로그인한 경우 관리자 대시보드 (admin.html)을 반환합니다.  
       로그인하지 않은 경우 로그인 페이지로 이동됩니다.
     responses:
       200:
@@ -358,8 +358,8 @@ def save_attendance():
       - Attendance
     summary: 출퇴근 기록을 저장합니다.
     description: 
-      - 강사명이 포함된 출퇴근 기록을 `attendance` 테이블에 저장합니다.
-      - `주강사`와 `보조강사`의 출퇴근 기록을 분리하여 저장합니다.
+      - 강사명이 포함된 출퇴근 기록을 attendance 테이블에 저장합니다.
+      - 주강사와 보조강사의 출퇴근 기록을 분리하여 저장합니다.
     parameters:
       - in: body
         name: body
