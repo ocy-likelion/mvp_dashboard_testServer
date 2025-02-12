@@ -86,8 +86,8 @@ def login():
       - Auth
     summary: 로그인 페이지 및 인증 처리
     description: 
-      - **GET 요청**: 로그인 페이지 HTML을 반환합니다.  
-      - **POST 요청**: 입력한 사용자 정보를 검증하여 로그인 처리를 수행합니다.
+      - GET 요청: 로그인 페이지 HTML을 반환합니다.  
+      - POST 요청: 입력한 사용자 정보를 검증하여 로그인 처리를 수행합니다.
     parameters:
       - in: body
         name: body
