@@ -1133,7 +1133,63 @@ def get_training_info():
 @app.route('/unchecked_descriptions', methods=['GET'])
 def get_unchecked_descriptions():
     """
-    미체크 항목 설명 목록 조회 API (훈련과정별 그룹화)
+    미체크 항목 설명 목록 조회 API
+    ---
+    tags:
+      - Unchecked Descriptions
+    summary: 미체크 항목 설명 목록을 조회합니다.
+    description: 
+      데이터베이스에서 해결되지 않은 미체크 항목 목록을 훈련 과정별로 그룹화하여 반환합니다.
+    responses:
+      200:
+        description: 미체크 항목 목록 조회 성공
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  training_course:
+                    type: string
+                    example: "데이터 분석 스쿨"
+                  unchecked_items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                          example: 1
+                        content:
+                          type: string
+                          example: "출석 체크 시스템 오류로 인해 확인 불가"
+                        created_at:
+                          type: string
+                          example: "2025-02-12 10:30:00"
+                        resolved:
+                          type: boolean
+                          example: false
+                        comments:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id:
+                                type: integer
+                                example: 1
+                              comment:
+                                type: string
+                                example: "확인 후 조치 예정입니다."
+                              created_at:
+                                type: string
+                                example: "2025-02-12 11:00:00"
+      500:
+        description: 미체크 항목 목록 조회 실패
     """
     try:
         conn = get_db_connection()
@@ -1173,28 +1229,54 @@ def get_unchecked_descriptions():
         logging.error("Error retrieving unchecked descriptions", exc_info=True)
         return jsonify({"success": False, "message": "미체크 항목 목록을 불러오는 중 오류 발생"}), 500
 
-    
-# 미체크 항목 저장
+
+# ✅ 미체크 항목 저장
 @app.route('/unchecked_descriptions', methods=['POST'])
 def save_unchecked_description():
     """
     미체크 항목 설명 저장 API
+    ---
+    tags:
+      - Unchecked Descriptions
+    summary: 새로운 미체크 항목 설명을 저장합니다.
+    description: 
+      사용자가 미체크 항목에 대한 설명을 입력하여 데이터베이스에 저장합니다.
+    parameters:
+      - in: body
+        name: body
+        description: 미체크 항목 데이터
+        required: true
+        schema:
+          type: object
+          required:
+            - description
+            - training_course
+          properties:
+            description:
+              type: string
+              example: "출석 체크 시스템 오류로 인해 확인 불가"
+            training_course:
+              type: string
+              example: "데이터 분석 스쿨"
+    responses:
+      201:
+        description: 미체크 항목 설명 저장 성공
+      400:
+        description: 필수 데이터 누락
+      500:
+        description: 서버 오류 발생
     """
     try:
-        # 🛠 요청에서 JSON 데이터를 가져오도록 수정
         if not request.is_json:
             return jsonify({"success": False, "message": "Invalid JSON format"}), 400
 
         data = request.get_json()
-
         description = data.get("description", "").strip()
         training_course = data.get("training_course", "").strip()
 
-        # 🛠 필수 필드 검증
         if not description or not training_course:
             return jsonify({"success": False, "message": "설명과 훈련과정명을 모두 입력하세요."}), 400
 
-        # 🛠 DB 연결 및 INSERT 수행
         conn = get_db_connection()
         cursor = conn.cursor()
 
@@ -1214,12 +1296,39 @@ def save_unchecked_description():
         return jsonify({"success": False, "message": "서버 오류 발생"}), 500
 
 
-
 # ✅ 미체크 항목 댓글 저장
 @app.route('/unchecked_comments', methods=['POST'])
 def add_unchecked_comment():
     """
     미체크 항목에 댓글 추가 API
+    ---
+    tags:
+      - Unchecked Comments
+    summary: 미체크 항목에 대한 댓글을 저장합니다.
+    description: 사용자가 특정 미체크 항목에 대해 댓글을 추가할 수 있습니다.
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - unchecked_id
+            - comment
+          properties:
+            unchecked_id:
+              type: integer
+              example: 1
+            comment:
+              type: string
+              example: "확인 후 조치 예정입니다."
+    responses:
+      201:
+        description: 댓글 저장 성공
+      400:
+        description: 요청 데이터 오류
+      500:
+        description: 서버 오류 발생
     """
     try:
         data = request.json
@@ -1245,10 +1354,35 @@ def add_unchecked_comment():
         return jsonify({"success": False, "message": "댓글 저장 실패"}), 500
 
 
+# ✅ 미체크 항목 해결
 @app.route('/unchecked_descriptions/resolve', methods=['POST'])
 def resolve_unchecked_description():
     """
-    미체크 항목 해결 API (resolved=True로 변경)
+    미체크 항목 해결 API
+    ---
+    tags:
+      - Unchecked Descriptions
+    summary: 특정 미체크 항목을 해결 상태로 변경합니다.
+    description: 사용자가 특정 미체크 항목을 해결했음을 표시합니다.
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - unchecked_id
+          properties:
+            unchecked_id:
+              type: integer
+              example: 1
+    responses:
+      200:
+        description: 미체크 항목 해결 성공
+      400:
+        description: 요청 데이터 오류
+      500:
+        description: 서버 오류 발생
     """
     try:
         data = request.json
@@ -1268,6 +1402,7 @@ def resolve_unchecked_description():
     except Exception as e:
         logging.error("Error resolving unchecked description", exc_info=True)
         return jsonify({"success": False, "message": "미체크 항목 해결 실패"}), 500
+
 
 
 # ------------------- API 엔드포인트 문서화 끝 -------------------
