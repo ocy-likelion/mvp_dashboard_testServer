@@ -47,7 +47,7 @@
           tableBody.innerHTML = "";
           
           result.data.forEach(item => {
-            const completionStatus = item.check_rate === "100%" ? "완수" : "미완수";
+            const completionStatus = parseFloat(item.check_rate.replace('%', '')) === 100 ? "완수" : "미완수";
             const row = document.createElement('tr');
             row.innerHTML = `
               <td>${item.training_course}</td>
