@@ -13,7 +13,8 @@ logging.basicConfig(level=logging.ERROR)
 
 app = Flask(__name__, template_folder='templates')
 app.secret_key = 'your-secret-key'  # 실제 운영 환경에서는 안전한 난수를 사용하세요.
-CORS(app)  # 전체 애플리케이션에 대해 CORS 허용
+CORS(app, supports_credentials=True)  # ✅ CORS 설정 강화 (세션 쿠키 허용)
+
 app.config['SWAGGER'] = {
     'title': "업무 관리 대시보드 API",
     'uiversion': 3,  # 최신 Swagger UI 사용
@@ -102,9 +103,6 @@ def get_current_user():
     if 'user' not in session:
         return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
     return jsonify({"success": True, "user": session['user']}), 200
-
-
-
 
 
 # front_for_pro 페이지
