@@ -78,49 +78,68 @@ def healthcheck():
 
 # 로그인 페이지 및 처리
 @app.route('/login', methods=['GET', 'POST'])
+# def login():
+#     """
+#     로그인 API
+#     ---
+#     tags:
+#       - Auth
+#     summary: 로그인 페이지 및 인증 처리
+#     description: 
+#       - GET 요청: 로그인 페이지 HTML을 반환합니다.  
+#       - POST 요청: 입력한 사용자 정보를 검증하여 로그인 처리를 수행합니다.
+#     parameters:
+#       - in: body
+#         name: body
+#         required: false
+#         description: 로그인 시 사용되는 사용자 정보 (POST 요청 시 필요)
+#         schema:
+#           type: object
+#           properties:
+#             username:
+#               type: string
+#               example: "admin"
+#             password:
+#               type: string
+#               example: "password123"
+#     responses:
+#       200:
+#         description: 로그인 페이지 HTML 반환 (GET 요청)
+#       302:
+#         description: 로그인 성공 시 홈 화면으로 리다이렉트
+#       400:
+#         description: 로그인 실패 - 잘못된 사용자 정보
+#     """
+#     if request.method == 'POST':
+#         username = request.form.get('username')
+#         password = request.form.get('password')
+#         if check_login(username, password):
+#             session['user'] = username
+#             return redirect(url_for('home'))
+#         else:
+#             flash("로그인 정보가 올바르지 않습니다.")
+#             return render_template('login.html')
+#     else:
+#         return render_template('login.html')
+
 def login():
-    """
-    로그인 API
-    ---
-    tags:
-      - Auth
-    summary: 로그인 페이지 및 인증 처리
-    description: 
-      - GET 요청: 로그인 페이지 HTML을 반환합니다.  
-      - POST 요청: 입력한 사용자 정보를 검증하여 로그인 처리를 수행합니다.
-    parameters:
-      - in: body
-        name: body
-        required: false
-        description: 로그인 시 사용되는 사용자 정보 (POST 요청 시 필요)
-        schema:
-          type: object
-          properties:
-            username:
-              type: string
-              example: "admin"
-            password:
-              type: string
-              example: "password123"
-    responses:
-      200:
-        description: 로그인 페이지 HTML 반환 (GET 요청)
-      302:
-        description: 로그인 성공 시 홈 화면으로 리다이렉트
-      400:
-        description: 로그인 실패 - 잘못된 사용자 정보
-    """
-    if request.method == 'POST':
+    content_type = request.headers.get('Content-Type')
+
+    if content_type == 'application/json':
+        data = request.json
+        username = data.get('username')
+        password = data.get('password')
+    else:  # form 요청도 지원
         username = request.form.get('username')
         password = request.form.get('password')
-        if check_login(username, password):
-            session['user'] = username
-            return redirect(url_for('home'))
-        else:
-            flash("로그인 정보가 올바르지 않습니다.")
-            return render_template('login.html')
+
+    if check_login(username, password):
+        session['user'] = username
+        return redirect(url_for('home'))  # 로그인 성공 시 리다이렉트
     else:
-        return render_template('login.html')
+        flash("로그인 정보가 올바르지 않습니다.")
+        return render_template('login.html')  # 실패 시 HTML 반환
+
 
 
 # 로그아웃 기능
