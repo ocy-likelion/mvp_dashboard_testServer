@@ -117,6 +117,23 @@
     <button onclick="saveTaskSelections()">✅ 체크리스트 저장</button>
   </section>
 
+  <!-- 체크리스트 카테고리 선택 -->
+<label for="task-category">카테고리 선택:</label>
+<select id="task-category" onchange="fetchTasks()">
+  <option value="">전체</option>
+  <option value="운영">운영</option>
+  <option value="관리">관리</option>
+  <option value="기타">기타</option>
+</select>
+
+  <!-- 체크리스트 주기 선택 -->
+  <label for="task-period">체크리스트 주기:</label>
+  <select id="task-period" onchange="fetchTasks()">
+    <option value="daily">일별</option>
+    <option value="weekly">주별</option>
+    <option value="monthly">월별</option>
+  </select>
+
   <!-- 비정기 업무 체크리스트 섹션 -->
   <section id="irregular-tasks-section">
     <div class="section-title">비정기 업무 체크리스트</div>
@@ -339,28 +356,28 @@
     // ✅ 체크리스트 불러오기 (중복 제거)
     async function fetchTasks() {
       try {
-        const response = await fetch('/tasks');
+        const taskPeriod = document.getElementById('task-period').value;  // 선택된 체크리스트 주기
+        const taskCategory = document.getElementById('task-category').value;  // 선택된 카테고리
+        let url = `/tasks?task_period=${taskPeriod}`;
+        
+        if (taskCategory) {
+          url += `&task_category=${taskCategory}`;
+        }
+
+        const response = await fetch(url);
         const result = await response.json();
+        
         if(result.success) {
           const tasks = result.data;
           const taskListDiv = document.getElementById('task-list');
-          taskListDiv.innerHTML = ""; // 기존 체크리스트 초기화
-          taskSelections = {}; // 체크 상태 초기화
+          taskListDiv.innerHTML = ""; 
 
-          const latestTasks = {}; // 동일한 업무의 최신 체크만 저장
           tasks.forEach(task => {
-            latestTasks[task.task_name] = task;
-          });
-
-          Object.values(latestTasks).forEach(task => {
             const taskItem = document.createElement('div');
             const checkbox = document.createElement('input');
             checkbox.type = "checkbox";
-            checkbox.checked = task.is_checked;
             checkbox.dataset.taskName = task.task_name;
-            checkbox.onchange = () => taskSelections[task.task_name] = checkbox.checked;
 
-            // 날짜 정보는 출력하지 않고 작업 이름만 표시
             const label = document.createElement('label');
             label.textContent = task.task_name;
             label.style.marginLeft = "5px";
@@ -368,9 +385,6 @@
             taskItem.appendChild(checkbox);
             taskItem.appendChild(label);
             taskListDiv.appendChild(taskItem);
-
-            // 초기 체크 상태 저장
-            taskSelections[task.task_name] = task.is_checked;
           });
         } else {
           document.getElementById('task-list').innerText = "체크리스트를 불러오지 못했습니다.";
@@ -382,14 +396,20 @@
 
     // ✅ 체크리스트 저장 버튼 클릭 시 DB에 새로운 기록 추가
     async function saveTaskSelections() {
-      const updates = Object.keys(taskSelections).map(taskName => ({
-          task_name: taskName,
-          is_checked: taskSelections[taskName]
-      }));
+      const updates = [];
+      document.querySelectorAll('#task-list input[type="checkbox"]').forEach((checkbox) => {
+          updates.push({
+              task_name: checkbox.dataset.taskName,
+              is_checked: checkbox.checked
+          });
+      });
 
-      const trainingCourse = document.getElementById('training-course').value; // 선택된 과정명 가져오기
+      const trainingCourse = document.getElementById('training-course').value; // ✅ 훈련 과정명 추가
 
-      console.log("보내는 데이터:", JSON.stringify({ updates, training_course: trainingCourse }));
+      if (updates.length === 0) {
+          alert("저장할 항목이 없습니다.");
+          return;
+      }
 
       try {
           const response = await fetch('/tasks', {
@@ -399,16 +419,16 @@
           });
 
           const result = await response.json();
-          if (response.ok && result.success) {
-              alert(result.message);
-              fetchTasks();
+          if (result.success) {
+              alert("업무 체크리스트가 저장되었습니다!");
           } else {
-              alert("체크리스트 저장에 실패했습니다.");
+              alert("체크리스트 저장 실패!");
           }
       } catch (error) {
-          alert("오류 발생: " + error);
+          alert("서버 오류: " + error);
       }
   }
+
 
     // 페이지 로드 시 체크리스트 불러오기
     fetchTasks();

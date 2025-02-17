@@ -77,69 +77,28 @@ def healthcheck():
 
 
 # 로그인 페이지 및 처리
-@app.route('/login', methods=['GET', 'POST'])
-# def login():
-#     """
-#     로그인 API
-#     ---
-#     tags:
-#       - Auth
-#     summary: 로그인 페이지 및 인증 처리
-#     description: 
-#       - GET 요청: 로그인 페이지 HTML을 반환합니다.  
-#       - POST 요청: 입력한 사용자 정보를 검증하여 로그인 처리를 수행합니다.
-#     parameters:
-#       - in: body
-#         name: body
-#         required: false
-#         description: 로그인 시 사용되는 사용자 정보 (POST 요청 시 필요)
-#         schema:
-#           type: object
-#           properties:
-#             username:
-#               type: string
-#               example: "admin"
-#             password:
-#               type: string
-#               example: "password123"
-#     responses:
-#       200:
-#         description: 로그인 페이지 HTML 반환 (GET 요청)
-#       302:
-#         description: 로그인 성공 시 홈 화면으로 리다이렉트
-#       400:
-#         description: 로그인 실패 - 잘못된 사용자 정보
-#     """
-#     if request.method == 'POST':
-#         username = request.form.get('username')
-#         password = request.form.get('password')
-#         if check_login(username, password):
-#             session['user'] = username
-#             return redirect(url_for('home'))
-#         else:
-#             flash("로그인 정보가 올바르지 않습니다.")
-#             return render_template('login.html')
-#     else:
-#         return render_template('login.html')
-
+@app.route('/login', methods=['POST'])
 def login():
-    content_type = request.headers.get('Content-Type')
+    if request.content_type == 'application/json':
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({"success": False, "message": "요청 데이터가 없습니다."}), 400
+            
+            username = data.get('username')
+            password = data.get('password')
 
-    if content_type == 'application/json':
-        data = request.json
-        username = data.get('username')
-        password = data.get('password')
-    else:  # form 요청도 지원
-        username = request.form.get('username')
-        password = request.form.get('password')
-
-    if check_login(username, password):
-        session['user'] = username
-        return redirect(url_for('home'))  # 로그인 성공 시 리다이렉트
+        except Exception as e:
+            return jsonify({"success": False, "message": f"JSON 파싱 오류: {e}"}), 400
     else:
-        flash("로그인 정보가 올바르지 않습니다.")
-        return render_template('login.html')  # 실패 시 HTML 반환
+        return jsonify({"success": False, "message": "지원하지 않는 요청 형식입니다."}), 400
 
+    # 로그인 검증
+    if username and password and check_login(username, password):
+        session['user'] = username
+        return jsonify({"success": True, "message": "로그인 성공", "redirect_url": "/home"})
+    else:
+        return jsonify({"success": False, "message": "로그인 정보가 올바르지 않습니다."}), 401
 
 
 # 로그아웃 기능
@@ -490,24 +449,37 @@ def get_tasks():
         description: 업무 체크리스트 조회 실패
     """
     try:
+        task_period = request.args.get('task_period', 'daily')  # 기본값: 일별 체크리스트
+        task_category = request.args.get('task_category')  # 선택적 필터링
+
+        if task_period not in ['daily', 'weekly', 'monthly']:
+            return jsonify({"success": False, "message": "Invalid task period"}), 400
+
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT id, task_name, is_checked, checked_date FROM task_checklist')
-        tasks = [
-            {
-                "id": row[0],
-                "task_name": row[1],
-                "is_checked": bool(row[2]),
-                "checked_date": row[3] if row[3] else "미체크"
-            }
-            for row in cursor.fetchall()
-        ]
+
+        # 카테고리 필터링 포함
+        if task_category:
+            cursor.execute(
+                "SELECT task_name FROM task_items WHERE task_period = %s AND task_category = %s ORDER BY id ASC",
+                (task_period, task_category)
+            )
+        else:
+            cursor.execute(
+                "SELECT task_name FROM task_items WHERE task_period = %s ORDER BY id ASC",
+                (task_period,)
+            )
+
+        tasks = [{"task_name": row[0]} for row in cursor.fetchall()]
+
         cursor.close()
         conn.close()
+
         return jsonify({"success": True, "data": tasks}), 200
     except Exception as e:
         logging.error("Error retrieving tasks", exc_info=True)
         return jsonify({"success": False, "message": "Failed to retrieve tasks"}), 500
+    
 
 @app.route('/tasks', methods=['POST'])
 def save_tasks():
@@ -553,8 +525,6 @@ def save_tasks():
     """
     try:
         data = request.json
-        print("Received data:", data)
-
         updates = data.get("updates")
         training_course = data.get("training_course")
 
@@ -568,10 +538,21 @@ def save_tasks():
             task_name = update.get("task_name")
             is_checked = update.get("is_checked")
 
-            cursor.execute('''
-                INSERT INTO task_checklist (task_name, is_checked, checked_date, training_course)
-                VALUES (%s, %s, %s, %s)
-            ''', (task_name, is_checked, datetime.now().strftime("%Y-%m-%d"), training_course))
+            # task_items 테이블에서 task_id 찾기
+            cursor.execute("SELECT id FROM task_items WHERE task_name = %s", (task_name,))
+            task_item = cursor.fetchone()
+            if not task_item:
+                return jsonify({"success": False, "message": f"Task '{task_name}' does not exist"}), 400
+
+            task_id = task_item[0]
+
+            # 기존 체크리스트 상태 업데이트 (없으면 새로 삽입)
+            cursor.execute("""
+                INSERT INTO task_checklist (task_id, training_course, is_checked, checked_date)
+                VALUES (%s, %s, %s, NOW())
+                ON CONFLICT (task_id, training_course) 
+                DO UPDATE SET is_checked = EXCLUDED.is_checked, checked_date = NOW();
+            """, (task_id, training_course, is_checked))
 
         conn.commit()
         cursor.close()
