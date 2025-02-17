@@ -34,25 +34,9 @@ def get_db_connection():
     
     conn = psycopg2.connect(DATABASE_URL)
     return conn
-
-
-# 사용자 로그인 검증 함수 (users 테이블에서 username과 password 확인)
-def check_login(username, password):
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE username = %s AND password = %s", (username, password))
-        user = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        return user is not None
-    except Exception as e:
-        logging.error("Error checking login", exc_info=True)
-        return False
     
 
 # ------------------- API 엔드포인트 문서화 시작 -------------------
-
 
 # healthcheck 라우트 -> DB 확인하기 위함
 @app.route('/healthcheck', methods=['GET'])
@@ -76,71 +60,52 @@ def healthcheck():
     return jsonify({"status": "ok", "message": "Service is running!"}), 200
 
 
-# 로그인 페이지 및 처리
-@app.route('/login', methods=['GET', 'POST'])
+# ✅ 로그인 API
+@app.route('/login', methods=['POST'])
 def login():
-    print(f"Received request method: {request.method}")  # ✅ 요청 메서드 로그 출력
-    print(f"Request headers: {request.headers}")  # ✅ 요청 헤더 확인
-    print(f"Request data: {request.data}")  # ✅ 요청 데이터 확인
-
-    if request.method == 'GET':
-        return render_template("login.html")
-
-    if request.is_json:
-        data = request.get_json()
-    else:
-        data = request.form
-
-    print(f"Parsed data: {data}")  # ✅ 파싱된 데이터 출력
-
+    data = request.json
     username = data.get('username')
     password = data.get('password')
 
-    if username and password and check_login(username, password):
-        session['user'] = username
-        return jsonify({"success": True, "message": "로그인 성공", "redirect_url": "/home"}), 200
-    else:
-        return jsonify({"success": False, "message": "로그인 정보가 올바르지 않습니다."}), 401
+    if not username or not password:
+        return jsonify({"success": False, "message": "ID와 비밀번호를 입력하세요."}), 400
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, password FROM users WHERE username = %s", (username,))
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if not user or user[1] != password:
+            return jsonify({"success": False, "message": "잘못된 ID 또는 비밀번호입니다."}), 401
+
+        session['user'] = {"id": user[0], "username": username}
+        return jsonify({"success": True, "message": "로그인 성공!"}), 200
+
+    except Exception as e:
+        logging.error("로그인 오류", exc_info=True)
+        return jsonify({"success": False, "message": "서버 오류 발생"}), 500
 
 
-# 로그아웃 기능
-@app.route('/logout')
+# ✅ 로그아웃 API
+@app.route('/logout', methods=['POST'])
 def logout():
-    """
-    로그아웃 API
-    ---
-    tags:
-      - Auth
-    summary: 현재 사용자의 세션을 종료하고 로그아웃합니다.
-    description: 
-      사용자의 로그인 세션을 삭제한 후 로그인 페이지로 리다이렉트합니다.
-    responses:
-      302:
-        description: 로그아웃 후 로그인 페이지로 리다이렉트
-    """
     session.pop('user', None)
-    return redirect(url_for('login'))
+    return jsonify({"success": True, "message": "로그아웃 완료!"}), 200
 
 
-# 홈 화면 (로그인 후 접근 가능한 사원 관리 화면)
-@app.route('/', methods=['GET'])
-def home():
-    """
-    홈 화면 API
-    ---
-    tags:
-      - Views
-    summary: 홈 화면 접근
-    description: 
-      - 로그인한 사용자가 홈 화면으로 이동합니다.  
-      - 로그인하지 않은 경우 로그인 페이지로 리다이렉트됩니다.
-    responses:
-      302:
-        description: 로그인 상태 확인 후 리다이렉트 (로그인 페이지 또는 홈 화면)
-    """
+# ✅ 로그인 상태 확인 API
+@app.route('/me', methods=['GET'])
+def get_current_user():
     if 'user' not in session:
-        return redirect(url_for('login'))
-    return redirect(url_for('front_for_pro'))
+        return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
+    return jsonify({"success": True, "user": session['user']}), 200
+
+
+
+
 
 # front_for_pro 페이지
 @app.route('/front_for_pro', methods=['GET'])
