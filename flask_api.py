@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 import os, psycopg2
 import logging
 from datetime import datetime
+import bcrypt
+
 
 # 로깅 설정
 logging.basicConfig(level=logging.ERROR)
@@ -41,11 +43,15 @@ def check_login(username, password):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE username = %s AND password = %s", (username, password))
+        cursor.execute("SELECT password FROM users WHERE username = %s", (username,))
         user = cursor.fetchone()
         cursor.close()
         conn.close()
-        return user is not None
+        
+        if user:
+            stored_password = user[0]  # DB에 저장된 해시된 비밀번호
+            return bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8'))
+        return False
     except Exception as e:
         logging.error("Error checking login", exc_info=True)
         return False
@@ -76,29 +82,22 @@ def healthcheck():
     return jsonify({"status": "ok", "message": "Service is running!"}), 200
 
 
-# 로그인 페이지 및 처리
-@app.route('/login', methods=['POST'])
+@app.route('/login', methods=['POST'])  # ✅ POST 요청만 허용
 def login():
-    if request.content_type == 'application/json':
-        try:
-            data = request.get_json()
-            if not data:
-                return jsonify({"success": False, "message": "요청 데이터가 없습니다."}), 400
-            
-            username = data.get('username')
-            password = data.get('password')
+    content_type = request.headers.get('Content-Type')
 
-        except Exception as e:
-            return jsonify({"success": False, "message": f"JSON 파싱 오류: {e}"}), 400
+    if content_type == 'application/json':
+        data = request.json
+        username = data.get('username')
+        password = data.get('password')
     else:
-        return jsonify({"success": False, "message": "지원하지 않는 요청 형식입니다."}), 400
+        return jsonify({"success": False, "message": "Invalid Content-Type"}), 400
 
-    # 로그인 검증
-    if username and password and check_login(username, password):
+    if check_login(username, password):
         session['user'] = username
-        return jsonify({"success": True, "message": "로그인 성공", "redirect_url": "/home"})
+        return jsonify({"success": True, "message": "로그인 성공"}), 200
     else:
-        return jsonify({"success": False, "message": "로그인 정보가 올바르지 않습니다."}), 401
+        return jsonify({"success": False, "message": "로그인 실패"}), 400
 
 
 # 로그아웃 기능
