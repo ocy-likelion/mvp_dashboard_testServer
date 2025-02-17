@@ -77,26 +77,28 @@ def healthcheck():
 
 
 # 로그인 페이지 및 처리
-@app.route('/login', methods=['POST'])
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.content_type == 'application/json':
-        try:
-            data = request.get_json()
-            if not data:
-                return jsonify({"success": False, "message": "요청 데이터가 없습니다."}), 400
-            
-            username = data.get('username')
-            password = data.get('password')
+    print(f"Received request method: {request.method}")  # ✅ 요청 메서드 로그 출력
+    print(f"Request headers: {request.headers}")  # ✅ 요청 헤더 확인
+    print(f"Request data: {request.data}")  # ✅ 요청 데이터 확인
 
-        except Exception as e:
-            return jsonify({"success": False, "message": f"JSON 파싱 오류: {e}"}), 400
+    if request.method == 'GET':
+        return render_template("login.html")
+
+    if request.is_json:
+        data = request.get_json()
     else:
-        return jsonify({"success": False, "message": "지원하지 않는 요청 형식입니다."}), 400
+        data = request.form
 
-    # 로그인 검증
+    print(f"Parsed data: {data}")  # ✅ 파싱된 데이터 출력
+
+    username = data.get('username')
+    password = data.get('password')
+
     if username and password and check_login(username, password):
         session['user'] = username
-        return jsonify({"success": True, "message": "로그인 성공", "redirect_url": "/home"})
+        return jsonify({"success": True, "message": "로그인 성공", "redirect_url": "/home"}), 200
     else:
         return jsonify({"success": False, "message": "로그인 정보가 올바르지 않습니다."}), 401
 
