@@ -7,8 +7,6 @@ from dotenv import load_dotenv
 import os, psycopg2
 import logging
 from datetime import datetime
-import bcrypt
-
 
 # 로깅 설정
 logging.basicConfig(level=logging.ERROR)
@@ -43,15 +41,11 @@ def check_login(username, password):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT password FROM users WHERE username = %s", (username,))
+        cursor.execute("SELECT * FROM users WHERE username = %s AND password = %s", (username, password))
         user = cursor.fetchone()
         cursor.close()
         conn.close()
-        
-        if user:
-            stored_password = user[0]  # DB에 저장된 해시된 비밀번호
-            return bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8'))
-        return False
+        return user is not None
     except Exception as e:
         logging.error("Error checking login", exc_info=True)
         return False
@@ -82,35 +76,29 @@ def healthcheck():
     return jsonify({"status": "ok", "message": "Service is running!"}), 200
 
 
-# 로그인
-@app.route('/login', methods=['GET', 'POST'])
+# 로그인 페이지 및 처리
+@app.route('/login', methods=['POST'])
 def login():
-    if request.method == 'GET':  # ✅ GET 요청이 오면, 단순한 메시지 반환
-        return jsonify({"success": False, "message": "로그인 페이지 접근"}), 200
+    if request.content_type == 'application/json':
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({"success": False, "message": "요청 데이터가 없습니다."}), 400
+            
+            username = data.get('username')
+            password = data.get('password')
 
-    if not request.is_json:  # ✅ POST 요청이 JSON 형식인지 체크
-        return jsonify({"success": False, "message": "Invalid Content-Type, must be application/json"}), 400
+        except Exception as e:
+            return jsonify({"success": False, "message": f"JSON 파싱 오류: {e}"}), 400
+    else:
+        return jsonify({"success": False, "message": "지원하지 않는 요청 형식입니다."}), 400
 
-    try:
-        data = request.get_json(silent=True)  # ✅ request.json 대신 request.get_json() 사용
-        if data is None:
-            return jsonify({"success": False, "message": "Missing JSON body"}), 400
-
-        username = data.get('username')
-        password = data.get('password')
-
-        if not username or not password:
-            return jsonify({"success": False, "message": "Username and password are required"}), 400
-
-        if check_login(username, password):
-            session['user'] = username
-            return jsonify({"success": True, "message": "로그인 성공"}), 200
-        else:
-            return jsonify({"success": False, "message": "로그인 실패"}), 400
-    except Exception as e:
-        logging.error("Login error", exc_info=True)
-        return jsonify({"success": False, "message": "Server error"}), 500
-
+    # 로그인 검증
+    if username and password and check_login(username, password):
+        session['user'] = username
+        return jsonify({"success": True, "message": "로그인 성공", "redirect_url": "/home"})
+    else:
+        return jsonify({"success": False, "message": "로그인 정보가 올바르지 않습니다."}), 401
 
 
 # 로그아웃 기능
