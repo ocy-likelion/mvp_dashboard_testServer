@@ -611,26 +611,23 @@ def get_tasks():
         description: 업무 체크리스트 조회 실패
     """
     try:
-        task_period = request.args.get('task_period', 'daily')  # 기본값: 일별 체크리스트
+        task_period = request.args.get('task_period')  # 기본값 제거
         task_category = request.args.get('task_category')  # 선택적 필터링
-
-        if task_period not in ['daily', 'weekly', 'monthly']:
-            return jsonify({"success": False, "message": "Invalid task period"}), 400
 
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # 카테고리 필터링 포함하여 필요한 모든 컬럼 선택
+        # 모든 task_period를 가져오도록 수정
+        query = "SELECT id, task_name, task_period, task_category FROM task_items"
+        params = []
+
         if task_category:
-            cursor.execute(
-                "SELECT id, task_name, task_period, task_category FROM task_items WHERE task_period = %s AND task_category = %s ORDER BY id ASC",
-                (task_period, task_category)
-            )
-        else:
-            cursor.execute(
-                "SELECT id, task_name, task_period, task_category FROM task_items WHERE task_period = %s ORDER BY id ASC",
-                (task_period,)
-            )
+            query += " WHERE task_category = %s"
+            params.append(task_category)
+
+        query += " ORDER BY id ASC"
+
+        cursor.execute(query, tuple(params))
 
         tasks = [
             {
