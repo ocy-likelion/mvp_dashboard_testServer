@@ -1533,4 +1533,5 @@ def get_task_status():
 # ------------------- API 엔드포인트 문서화 끝 -------------------
  
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=10000)
+    port = int(os.getenv("PORT", 10000))  # 기본값을 10000으로 설정
+    app.run(host="0.0.0.0", port=port)
