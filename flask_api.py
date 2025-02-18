@@ -406,6 +406,10 @@ def get_tasks():
                     type: integer
                   task_name:
                     type: string
+                  task_period:
+                    type: string
+                  task_category:
+                    type: string
                   is_checked:
                     type: boolean
                   checked_date:
@@ -423,19 +427,27 @@ def get_tasks():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # 카테고리 필터링 포함
+        # 카테고리 필터링 포함하여 필요한 모든 컬럼 선택
         if task_category:
             cursor.execute(
-                "SELECT task_name FROM task_items WHERE task_period = %s AND task_category = %s ORDER BY id ASC",
+                "SELECT id, task_name, task_period, task_category FROM task_items WHERE task_period = %s AND task_category = %s ORDER BY id ASC",
                 (task_period, task_category)
             )
         else:
             cursor.execute(
-                "SELECT task_name FROM task_items WHERE task_period = %s ORDER BY id ASC",
+                "SELECT id, task_name, task_period, task_category FROM task_items WHERE task_period = %s ORDER BY id ASC",
                 (task_period,)
             )
 
-        tasks = [{"task_name": row[0]} for row in cursor.fetchall()]
+        tasks = [
+            {
+                "id": row[0],
+                "task_name": row[1],
+                "task_period": row[2],
+                "task_category": row[3]
+            }
+            for row in cursor.fetchall()
+        ]
 
         cursor.close()
         conn.close()
@@ -444,6 +456,7 @@ def get_tasks():
     except Exception as e:
         logging.error("Error retrieving tasks", exc_info=True)
         return jsonify({"success": False, "message": "Failed to retrieve tasks"}), 500
+
     
 
 @app.route('/tasks', methods=['POST'])
@@ -490,6 +503,7 @@ def save_tasks():
     """
     try:
         data = request.json
+        print("ata", data)
         updates = data.get("updates")
         training_course = data.get("training_course")
 
