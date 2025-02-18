@@ -248,7 +248,7 @@ def get_attendance():
         in: query
         type: string
         required: false
-        description: "csv 또는 excel 형식으로 다운로드 (기본값: JSON 반환)"
+        description: "csv 또는 excel 형식으로 다운로드 (기본값 JSON 반환)"
     responses:
       200:
         description: 출퇴근 기록 데이터 반환 또는 파일 다운로드
@@ -392,7 +392,7 @@ def get_tasks():
     summary: 업무 체크리스트 데이터 조회
     description: 
       모든 업무 체크리스트 데이터를 조회합니다.  
-      `task_category`를 기준으로 필터링할 수 있습니다.
+      task_category를 기준으로 필터링할 수 있습니다.
     parameters:
       - name: task_category
         in: query
@@ -423,7 +423,7 @@ def get_tasks():
                   guide:
                     type: string
       400:
-        description: 잘못된 요청 (예: 유효하지 않은 `task_category` 값)
+        description: "잘못된 요청 (예: 유효하지 않은 task_category 값)"
         schema:
           type: object
           properties:
