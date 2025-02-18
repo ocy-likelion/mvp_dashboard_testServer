@@ -61,53 +61,9 @@ def healthcheck():
     return jsonify({"status": "ok", "message": "Service is running!"}), 200
 
 
-# 1 ✅ 로그인 API
+# ✅ 로그인 API
 @app.route('/login', methods=['POST'])
 def login():
-    """
-    사용자 로그인 API
-    ---
-    tags:
-      - Authentication
-    summary: 사용자 로그인
-    description: 
-      주어진 사용자명(username)과 비밀번호(password)를 검증하여 로그인 처리합니다.
-      올바른 정보가 입력되면 세션을 생성하고 성공 메시지를 반환합니다.
-    parameters:
-      - in: body
-        name: body
-        required: true
-        schema:
-          type: object
-          required:
-            - username
-            - password
-          properties:
-            username:
-              type: string
-              example: "user01"
-            password:
-              type: string
-              example: "mypassword"
-    responses:
-      200:
-        description: 로그인 성공
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              example: true
-            message:
-              type: string
-              example: "로그인 성공!"
-      400:
-        description: ID 또는 비밀번호 미입력
-      401:
-        description: 로그인 실패 (잘못된 ID 또는 비밀번호)
-      500:
-        description: 서버 오류 발생
-    """
     data = request.json
     username = data.get('username')
     password = data.get('password')
@@ -134,73 +90,22 @@ def login():
         return jsonify({"success": False, "message": "서버 오류 발생"}), 500
 
 
-# 2 ✅ 로그아웃 API
+# ✅ 로그아웃 API
 @app.route('/logout', methods=['POST'])
 def logout():
-    """
-    사용자 로그아웃 API
-    ---
-    tags:
-      - Authentication
-    summary: 사용자 로그아웃
-    description: 
-      현재 로그인된 사용자의 세션을 종료합니다.
-    responses:
-      200:
-        description: 로그아웃 성공
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              example: true
-            message:
-              type: string
-              example: "로그아웃 완료!"
-    """
     session.pop('user', None)
     return jsonify({"success": True, "message": "로그아웃 완료!"}), 200
 
 
-# 3 ✅ 로그인 상태 확인 API
+# ✅ 로그인 상태 확인 API
 @app.route('/me', methods=['GET'])
 def get_current_user():
-    """
-    로그인 상태 확인 API
-    ---
-    tags:
-      - Authentication
-    summary: 현재 로그인된 사용자 정보 조회
-    description: 
-      현재 로그인된 사용자의 정보를 반환합니다.
-      로그인되지 않은 경우, 오류 메시지를 반환합니다.
-    responses:
-      200:
-        description: 로그인된 사용자 정보 반환
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              example: true
-            user:
-              type: object
-              properties:
-                id:
-                  type: integer
-                  example: 1
-                username:
-                  type: string
-                  example: "user01"
-      401:
-        description: 로그인되지 않음
-    """
     if 'user' not in session:
         return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
     return jsonify({"success": True, "user": session['user']}), 200
 
 
-# 4 ✅ 프론트엔드 개발자 대시보드 API
+# front_for_pro 페이지
 @app.route('/front_for_pro', methods=['GET'])
 def front_for_pro():
     """
@@ -210,7 +115,7 @@ def front_for_pro():
       - Views
     summary: 프론트엔드 개발자를 위한 대시보드 페이지 반환
     description: 
-      사용자가 로그인한 경우 대시보드 페이지 (front_for_pro.html)를 반환합니다.
+      사용자가 로그인한 경우 대시보드 페이지 (front_for_pro.html)을 반환합니다.
       로그인하지 않은 경우 로그인 페이지로 이동됩니다.
     responses:
       200:
@@ -223,7 +128,7 @@ def front_for_pro():
     return render_template('front_for_pro.html')
 
 
-# 5 ✅ 관리자 대시보드 API
+# admin 페이지
 @app.route('/admin', methods=['GET'])
 def admin():
     """
@@ -233,7 +138,7 @@ def admin():
       - Views
     summary: 관리자 대시보드 페이지 반환
     description: 
-      사용자가 로그인한 경우 관리자 대시보드 (admin.html)를 반환합니다.  
+      사용자가 로그인한 경우 관리자 대시보드 (admin.html)을 반환합니다.  
       로그인하지 않은 경우 로그인 페이지로 이동됩니다.
     responses:
       200:
@@ -246,7 +151,6 @@ def admin():
     return render_template('admin.html')
 
 
-# 6 전달사항 조회 API
 @app.route('/notices', methods=['GET'])
 def get_notices():
     """
@@ -254,10 +158,6 @@ def get_notices():
     ---
     tags:
       - Notices
-    summary: 공지사항 및 전달사항 목록 조회
-    description: 
-      공지사항(notices)과 전달사항(remarks)을 포함한 데이터를 반환합니다.
-      전달사항은 `type` 값이 "전달사항"인 항목만 필터링하여 제공합니다.
     responses:
       200:
         description: 공지사항 및 전달사항 데이터를 포함한 응답
@@ -266,43 +166,15 @@ def get_notices():
           properties:
             success:
               type: boolean
-              example: true
             data:
               type: object
               properties:
                 notices:
                   type: array
-                  items:
-                    type: object
-                    properties:
-                      id:
-                        type: integer
-                        example: 1
-                      title:
-                        type: string
-                        example: "새로운 기능 업데이트"
-                      content:
-                        type: string
-                        example: "업데이트 내용 상세 설명..."
-                      date:
-                        type: string
-                        format: date
-                        example: "2025-02-12"
+                  description: 모든 공지사항 데이터
                 remarks:
                   type: array
-                  items:
-                    type: object
-                    properties:
-                      id:
-                        type: integer
-                        example: 2
-                      content:
-                        type: string
-                        example: "다음 주부터 업무 프로세스가 변경됩니다."
-                      date:
-                        type: string
-                        format: date
-                        example: "2025-02-13"
+                  description: "전달사항 타입인 공지 데이터"
       500:
         description: 공지사항을 불러오는 데 실패함
     """
@@ -326,34 +198,26 @@ def get_notices():
         logging.error("Error retrieving notices", exc_info=True)
         return jsonify({"success": False, "message": "Failed to retrieve notices"}), 500
 
-
-# 7 과정명 선택할 수 있는 드롭다운 설정
+# 과정명 선택할 수 있는 드롭다운 설정
 @app.route('/training_courses', methods=['GET'])
 def get_training_courses():
     """
-    훈련 과정 목록 조회 API
+    training_info 테이블에서 training_course 목록을 가져오는 API
     ---
     tags:
       - Training Info
-    summary: 훈련 과정명 목록 조회
-    description: 
-      training_info 테이블에서 등록된 훈련 과정명을 조회합니다.
     responses:
       200:
-        description: 훈련 과정 목록 반환
+        description: 훈련과정 목록 반환
         schema:
           type: object
           properties:
             success:
               type: boolean
-              example: true
             data:
               type: array
               items:
                 type: string
-                example: "데이터 분석 스쿨 100기"
-      500:
-        description: 훈련 과정 목록 조회 실패
     """
     try:
         conn = get_db_connection()
@@ -372,60 +236,22 @@ def get_training_courses():
         return jsonify({"success": False, "message": "Failed to fetch training courses"}), 500
 
 
-# 8 출퇴근 기록 파일 다운로드
 @app.route('/attendance', methods=['GET'])
 def get_attendance():
     """
-    출퇴근 기록 조회 및 다운로드 API
+    출퇴근 기록 파일 다운로드 API
     ---
     tags:
       - Attendance
-    summary: 출퇴근 기록 조회 및 다운로드
-    description: 
-      출퇴근 기록을 JSON, CSV, 또는 Excel 형식으로 반환합니다.
-      기본적으로 JSON을 반환하며, `format` 파라미터를 사용하여 CSV 또는 Excel 형식으로 요청할 수 있습니다.
     parameters:
       - name: format
         in: query
         type: string
         required: false
-        description: "csv 또는 excel 형식으로 다운로드 (기본값: json)"
+        description: "csv 또는 excel 형식으로 다운로드 (기본값: JSON 반환)"
     responses:
       200:
         description: 출퇴근 기록 데이터 반환 또는 파일 다운로드
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              example: true
-            data:
-              type: array
-              items:
-                type: object
-                properties:
-                  id:
-                    type: integer
-                    example: 1
-                  date:
-                    type: string
-                    format: date
-                    example: "2025-02-12"
-                  instructor:
-                    type: string
-                    example: "홍길동"
-                  training_course:
-                    type: string
-                    example: "데이터 분석 스쿨"
-                  check_in:
-                    type: string
-                    example: "09:00"
-                  check_out:
-                    type: string
-                    example: "18:00"
-                  daily_log:
-                    type: boolean
-                    example: true
       500:
         description: 데이터 조회 실패
     """
@@ -465,7 +291,7 @@ def get_attendance():
         logging.error("출퇴근 기록 조회 오류", exc_info=True)
         return jsonify({"success": False, "message": "출퇴근 기록 조회 실패"}), 500
 
-# 9 출퇴근 기록 저장
+# 출퇴근 기록 저장
 @app.route('/attendance', methods=['POST'])
 def save_attendance():
     """
@@ -473,10 +299,10 @@ def save_attendance():
     ---
     tags:
       - Attendance
-    summary: 출퇴근 기록 저장
+    summary: 출퇴근 기록을 저장합니다.
     description: 
-      강사의 출퇴근 기록을 데이터베이스에 저장합니다.
-      훈련 과정과 강사 유형(주강사, 보조강사)도 함께 저장됩니다.
+      - 강사명이 포함된 출퇴근 기록을 attendance 테이블에 저장합니다.
+      - 주강사와 보조강사의 출퇴근 기록을 분리하여 저장합니다.
     parameters:
       - in: body
         name: body
@@ -555,7 +381,7 @@ def save_attendance():
         logging.error("Error saving attendance", exc_info=True)
         return jsonify({"success": False, "message": "Failed to save attendance"}), 500
 
-# 10 업무 체크리스트 조회 API
+
 @app.route('/tasks', methods=['GET'])
 def get_tasks():
     """
@@ -563,21 +389,6 @@ def get_tasks():
     ---
     tags:
       - Tasks
-    summary: 업무 체크리스트 데이터 조회
-    description: 
-      `task_period` 및 `task_category`를 기준으로 필터링하여 업무 체크리스트를 조회합니다.
-    parameters:
-      - name: task_period
-        in: query
-        type: string
-        required: false
-        description: "업무 체크리스트 조회 기간 (daily, weekly, monthly)"
-        default: "daily"
-      - name: task_category
-        in: query
-        type: string
-        required: false
-        description: "업무 체크리스트의 카테고리 (예: 개발, 디자인)"
     responses:
       200:
         description: 업무 체크리스트 데이터를 반환함
@@ -586,7 +397,6 @@ def get_tasks():
           properties:
             success:
               type: boolean
-              example: true
             data:
               type: array
               items:
@@ -594,16 +404,16 @@ def get_tasks():
                 properties:
                   id:
                     type: integer
-                    example: 1
                   task_name:
                     type: string
-                    example: "코드 리뷰"
                   task_period:
                     type: string
-                    example: "daily"
                   task_category:
                     type: string
-                    example: "개발"
+                  is_checked:
+                    type: boolean
+                  checked_date:
+                    type: string
       500:
         description: 업무 체크리스트 조회 실패
     """
@@ -648,32 +458,22 @@ def get_tasks():
         return jsonify({"success": False, "message": "Failed to retrieve tasks"}), 500
 
     
-# 11 업무 체크리스트 저장
+
 @app.route('/tasks', methods=['POST'])
 def save_tasks():
     """
-    업무 체크리스트 저장 API
+    업무 체크리스트 저장 API (새로운 기록 추가, 기존 데이터는 유지)
     ---
     tags:
       - Tasks
-    summary: 업무 체크리스트 저장
-    description:
-      업무 체크리스트의 완료 여부를 업데이트하거나 새로 추가합니다.
-      기존 데이터를 덮어쓰지 않고, 새로운 체크 상태를 추가합니다.
     parameters:
       - in: body
         name: body
+        description: 저장할 체크리스트 업데이트 데이터
         required: true
         schema:
           type: object
-          required:
-            - updates
-            - training_course
           properties:
-            training_course:
-              type: string
-              example: "데이터 분석 스쿨"
-              description: "훈련 과정명"
             updates:
               type: array
               items:
@@ -684,26 +484,22 @@ def save_tasks():
                 properties:
                   task_name:
                     type: string
-                    example: "코드 리뷰"
                   is_checked:
                     type: boolean
-                    example: true
     responses:
       201:
-        description: 업무 체크리스트 저장 성공
+        description: 업무 체크리스트 업데이트 성공
         schema:
           type: object
           properties:
             success:
               type: boolean
-              example: true
             message:
               type: string
-              example: "Tasks saved successfully!"
       400:
-        description: 요청 데이터 오류 (필수 데이터 누락)
+        description: 업데이트할 데이터 없음
       500:
-        description: 서버 오류 발생
+        description: 업무 체크리스트 업데이트 실패
     """
     try:
         data = request.json
@@ -746,7 +542,7 @@ def save_tasks():
         logging.error("Error saving tasks", exc_info=True)
         return jsonify({"success": False, "message": "Failed to save tasks"}), 500
 
-# 12 전달사항 저장 API
+
 @app.route('/remarks', methods=['POST'])
 def save_remarks():
     """
@@ -754,12 +550,10 @@ def save_remarks():
     ---
     tags:
       - Remarks
-    summary: 전달사항 저장
-    description:
-      전달사항 내용을 저장합니다.
     parameters:
       - in: body
         name: body
+        description: 저장할 전달사항 데이터
         required: true
         schema:
           type: object
@@ -768,7 +562,7 @@ def save_remarks():
           properties:
             remarks:
               type: string
-              example: "다음 주부터 업무 프로세스가 변경됩니다."
+              example: "전달사항 내용 예시"
     responses:
       201:
         description: 전달사항 저장 성공
@@ -777,14 +571,12 @@ def save_remarks():
           properties:
             success:
               type: boolean
-              example: true
             message:
               type: string
-              example: "Remarks saved!"
       400:
-        description: 요청 데이터 오류 (필수 데이터 누락)
+        description: 전달사항 데이터 누락
       500:
-        description: 서버 오류 발생
+        description: 전달사항 저장 실패
     """
     try:
         data = request.json
@@ -807,7 +599,6 @@ def save_remarks():
         logging.error("Error saving remarks", exc_info=True)
         return jsonify({"success": False, "message": "Failed to save remarks"}), 500
 
-# 13 이슈사항 저장 
 @app.route('/issues', methods=['POST'])
 def save_issue():
     """
@@ -815,37 +606,23 @@ def save_issue():
     ---
     tags:
       - Issues
-    summary: 이슈 저장
-    description:
-      특정 훈련 과정에서 발생한 이슈를 저장합니다.
     parameters:
       - in: body
         name: body
         required: true
         schema:
           type: object
-          required:
-            - issue
-            - training_course
-            - date
           properties:
             issue:
               type: string
               example: "강의 자료 오류 발생"
-            training_course:
-              type: string
-              example: "데이터 분석 스쿨"
-            date:
-              type: string
-              format: date
-              example: "2025-02-12"
     responses:
       201:
-        description: 이슈 저장 성공
+        description: 이슈사항 저장 성공
       400:
-        description: 요청 데이터 오류 (필수 데이터 누락)
+        description: 요청 데이터 오류
       500:
-        description: 서버 오류 발생
+        description: 서버 오류
     """
     try:
         data = request.json
@@ -873,7 +650,7 @@ def save_issue():
         return jsonify({"success": False, "message": "이슈 저장 실패"}), 500
 
 
-# 14 
+
 @app.route('/issues', methods=['GET'])
 def get_issues():
     """
@@ -881,10 +658,7 @@ def get_issues():
     ---
     tags:
       - Issues
-    summary: 해결되지 않은 이슈 조회
-    description:
-      아직 해결되지 않은 이슈 목록을 조회합니다.
-      이슈에 대한 댓글도 함께 반환합니다.
+    summary: "해결되지 않은 이슈 목록을 조회합니다."
     responses:
       200:
         description: 해결되지 않은 이슈 목록 반환
@@ -893,39 +667,25 @@ def get_issues():
           properties:
             success:
               type: boolean
-              example: true
             data:
               type: array
               items:
                 type: object
                 properties:
+                  id:
+                    type: integer
+                  content:
+                    type: string
+                  date:
+                    type: string
                   training_course:
                     type: string
-                    example: "데이터 분석 스쿨"
-                  issues:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        id:
-                          type: integer
-                          example: 1
-                        content:
-                          type: string
-                          example: "강의 자료 오류 발생"
-                        date:
-                          type: string
-                          format: date
-                          example: "2025-02-12"
-                        created_at:
-                          type: string
-                          format: date-time
-                          example: "2025-02-12T10:00:00"
-                        resolved:
-                          type: boolean
-                          example: false
+                  created_at:
+                    type: string
+                  resolved:
+                    type: boolean
       500:
-        description: 서버 오류 발생
+        description: 이슈 목록 조회 실패
     """
     try:
         conn = get_db_connection()
@@ -967,7 +727,7 @@ def get_issues():
         return jsonify({"success": False, "message": "이슈 목록을 불러오는 중 오류 발생"}), 500
 
 
-# 15 이슈에 대한 댓글 달기
+# 이슈에 대한 댓글 달기
 @app.route('/issues/comments', methods=['POST'])
 def add_issue_comment():
     """
@@ -975,18 +735,12 @@ def add_issue_comment():
     ---
     tags:
       - Issues
-    summary: 이슈에 대한 댓글 저장
-    description:
-      특정 이슈에 대한 댓글을 저장합니다.
     parameters:
       - in: body
         name: body
         required: true
         schema:
           type: object
-          required:
-            - issue_id
-            - comment
           properties:
             issue_id:
               type: integer
@@ -998,9 +752,9 @@ def add_issue_comment():
       201:
         description: 댓글 저장 성공
       400:
-        description: 요청 데이터 오류 (필수 데이터 누락)
+        description: 요청 데이터 오류
       500:
-        description: 서버 오류 발생
+        description: 서버 오류
     """
     try:
         data = request.json
@@ -1025,7 +779,7 @@ def add_issue_comment():
         logging.error("Error saving issue comment", exc_info=True)
         return jsonify({"success": False, "message": "댓글 저장 실패"}), 500
 
-# 16 이슈에 대한 댓글 조회
+# 이슈에 대한 댓글 조회
 @app.route('/issues/comments', methods=['GET'])
 def get_issue_comments():
     """
@@ -1033,15 +787,13 @@ def get_issue_comments():
     ---
     tags:
       - Issues
-    summary: 특정 이슈에 대한 댓글 목록 조회
-    description:
-      특정 이슈에 대한 모든 댓글을 조회합니다.
+    summary: "특정 이슈에 대한 댓글 목록을 조회합니다."
     parameters:
       - name: issue_id
         in: query
         type: integer
         required: true
-        description: 조회할 이슈 ID
+        description: "조회할 이슈 ID"
     responses:
       200:
         description: 이슈사항의 댓글 목록 반환
@@ -1050,7 +802,6 @@ def get_issue_comments():
           properties:
             success:
               type: boolean
-              example: true
             data:
               type: array
               items:
@@ -1058,18 +809,12 @@ def get_issue_comments():
                 properties:
                   id:
                     type: integer
-                    example: 1
                   comment:
                     type: string
-                    example: "이슈에 대한 답변입니다."
                   created_at:
                     type: string
-                    format: date-time
-                    example: "2025-02-12T14:00:00Z"
-      400:
-        description: 필수 데이터 누락 (이슈 ID 없음)
       500:
-        description: 서버 오류 발생
+        description: 댓글 조회 실패
     """
     try:
         issue_id = request.args.get('issue_id')
@@ -1095,7 +840,7 @@ def get_issue_comments():
         logging.error("Error retrieving issue comments", exc_info=True)
         return jsonify({"success": False, "message": "댓글 조회 실패"}), 500
 
-# 17 해결된 이슈 클릭
+# 해결된 이슈 클릭
 @app.route('/issues/resolve', methods=['POST'])
 def resolve_issue():
     """
@@ -1103,17 +848,13 @@ def resolve_issue():
     ---
     tags:
       - Issues
-    summary: 특정 이슈 해결 처리
-    description:
-      특정 이슈를 해결 상태로 변경합니다.
+    summary: "특정 이슈를 해결 처리합니다."
     parameters:
       - in: body
         name: body
         required: true
         schema:
           type: object
-          required:
-            - issue_id
           properties:
             issue_id:
               type: integer
@@ -1122,9 +863,9 @@ def resolve_issue():
       200:
         description: 이슈 해결 성공
       400:
-        description: 필수 데이터 누락 (이슈 ID 없음)
+        description: 요청 데이터 오류
       500:
-        description: 서버 오류 발생
+        description: 이슈 해결 실패
     """
     try:
         data = request.json
@@ -1148,22 +889,19 @@ def resolve_issue():
         logging.error("Error resolving issue", exc_info=True)
         return jsonify({"success": False, "message": "이슈 해결 실패"}), 500
 
-# 18 이슈사항 전체 다운로드
+# 이슈사항 전체 다운로드
 @app.route('/issues/download', methods=['GET'])
 def download_issues():
     """
-    이슈사항 다운로드 API
+    이슈사항을 Excel 파일로 다운로드하는 API
     ---
     tags:
       - Issues
-    summary: 이슈사항 데이터를 Excel 파일로 다운로드
-    description:
-      등록된 모든 이슈사항을 Excel 파일로 다운로드합니다.
     responses:
       200:
         description: 이슈사항을 Excel 파일로 다운로드
       500:
-        description: 서버 오류 발생
+        description: 이슈사항 다운로드 실패
     """
     try:
         conn = get_db_connection()
@@ -1194,17 +932,15 @@ def download_issues():
         logging.error("이슈사항 다운로드 실패", exc_info=True)
         return jsonify({"success": False, "message": "이슈 다운로드 실패"}), 500
 
-# 19 
+
 @app.route('/irregular_tasks', methods=['GET'])
 def get_irregular_tasks():
     """
-    비정기 업무 체크리스트 조회 API
+    비정기 업무 체크리스트 조회 API (가장 최근 상태만 반환)
     ---
     tags:
       - Irregular Tasks
-    summary: 비정기 업무 체크리스트 최신 상태 조회
-    description:
-      비정기 업무 체크리스트의 가장 최근 상태를 반환합니다.
+    summary: "비정기 업무 체크리스트의 가장 최근 상태를 조회합니다."
     responses:
       200:
         description: 비정기 업무 체크리스트 조회 성공
@@ -1213,7 +949,6 @@ def get_irregular_tasks():
           properties:
             success:
               type: boolean
-              example: true
             data:
               type: array
               items:
@@ -1221,19 +956,14 @@ def get_irregular_tasks():
                 properties:
                   id:
                     type: integer
-                    example: 1
                   task_name:
                     type: string
-                    example: "서버 점검"
                   is_checked:
                     type: boolean
-                    example: false
                   checked_date:
                     type: string
-                    format: date-time
-                    example: "2025-02-12T10:00:00Z"
       500:
-        description: 서버 오류 발생
+        description: 비정기 업무 조회 실패
     """
     try:
         conn = get_db_connection()
@@ -1257,51 +987,38 @@ def get_irregular_tasks():
         return jsonify({"success": False, "message": "비정기 업무 조회 실패"}), 500
 
 
-# 20 
+
 @app.route('/irregular_tasks', methods=['POST'])
 def save_irregular_tasks():
     """
-    비정기 업무 체크리스트 저장 API
+    비정기 업무 체크리스트 추가 저장 API
+    기존 데이터를 덮어씌우지 않고 새로운 체크 상태를 추가
     ---
     tags:
       - Irregular Tasks
-    summary: 비정기 업무 체크리스트 저장
-    description:
-      기존 데이터를 덮어쓰지 않고 새로운 체크 상태를 추가합니다.
+    summary: "비정기 업무 체크리스트 업데이트 데이터를 저장합니다."
     parameters:
       - in: body
         name: body
+        description: "저장할 비정기 업무 체크리스트 업데이트 데이터"
         required: true
         schema:
           type: object
-          required:
-            - updates
-            - training_course
           properties:
-            training_course:
-              type: string
-              example: "데이터 분석 스쿨"
             updates:
               type: array
               items:
                 type: object
-                required:
-                  - task_name
-                  - is_checked
                 properties:
                   task_name:
                     type: string
-                    example: "서버 점검"
                   is_checked:
                     type: boolean
-                    example: false
     responses:
       201:
         description: 비정기 업무 체크리스트 저장 성공
-      400:
-        description: 필수 데이터 누락
       500:
-        description: 서버 오류 발생
+        description: 비정기 업무 체크리스트 저장 실패
     """
     try:
         data = request.json
@@ -1332,7 +1049,7 @@ def save_irregular_tasks():
         return jsonify({"success": False, "message": "비정기 업무 체크리스트 저장 실패"}), 500
 
 
-# 21
+
 @app.route('/training_info', methods=['POST'])
 def save_training_info():
     """
@@ -1340,12 +1057,10 @@ def save_training_info():
     ---
     tags:
       - Training Info
-    summary: 새로운 훈련 과정 정보 저장
-    description:
-      새로운 훈련 과정 정보를 데이터베이스에 저장합니다.
     parameters:
       - in: body
         name: body
+        description: "훈련 과정 정보를 JSON 형식으로 전달"
         required: true
         schema:
           type: object
@@ -1373,9 +1088,9 @@ def save_training_info():
       201:
         description: 훈련 과정 저장 성공
       400:
-        description: 필수 데이터 누락
+        description: 필수 필드 누락
       500:
-        description: 서버 오류 발생
+        description: 훈련 과정 저장 실패
     """
     try:
         data = request.json
@@ -1404,7 +1119,7 @@ def save_training_info():
         logging.error("Error saving training info", exc_info=True)
         return jsonify({"success": False, "message": "Failed to save training info"}), 500
 
-# 22
+
 @app.route('/training_info', methods=['GET'])
 def get_training_info():
     """
@@ -1412,9 +1127,6 @@ def get_training_info():
     ---
     tags:
       - Training Info
-    summary: 훈련 과정 목록 조회
-    description:
-      등록된 모든 훈련 과정 정보를 조회합니다.
     responses:
       200:
         description: 저장된 훈련 과정 목록 반환
@@ -1423,7 +1135,6 @@ def get_training_info():
           properties:
             success:
               type: boolean
-              example: true
             data:
               type: array
               items:
@@ -1431,20 +1142,12 @@ def get_training_info():
                 properties:
                   training_course:
                     type: string
-                    example: "데이터 분석 스쿨 100기"
                   start_date:
                     type: string
-                    format: date
-                    example: "2025-01-02"
                   end_date:
                     type: string
-                    format: date
-                    example: "2025-06-01"
                   dept:
                     type: string
-                    example: "TechSol"
-      500:
-        description: 서버 오류 발생
     """
     try:
         conn = get_db_connection()
@@ -1468,22 +1171,67 @@ def get_training_info():
         return jsonify({"success": False, "message": "Failed to fetch training info"}), 500
 
 
-# 23 ✅ 미체크 항목 불러오기
+# ✅ 미체크 항목 불러오기
 @app.route('/unchecked_descriptions', methods=['GET'])
 def get_unchecked_descriptions():
     """
-    미체크 항목 목록 조회 API
+    미체크 항목 설명 목록 조회 API
     ---
     tags:
       - Unchecked Descriptions
-    summary: 미체크 항목 목록 조회
-    description:
-      해결되지 않은 미체크 항목을 훈련 과정별로 그룹화하여 반환합니다.
+    summary: 미체크 항목 설명 목록을 조회합니다.
+    description: 
+      데이터베이스에서 해결되지 않은 미체크 항목 목록을 훈련 과정별로 그룹화하여 반환합니다.
     responses:
       200:
         description: 미체크 항목 목록 조회 성공
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  training_course:
+                    type: string
+                    example: "데이터 분석 스쿨"
+                  unchecked_items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                          example: 1
+                        content:
+                          type: string
+                          example: "출석 체크 시스템 오류로 인해 확인 불가"
+                        created_at:
+                          type: string
+                          example: "2025-02-12 10:30:00"
+                        resolved:
+                          type: boolean
+                          example: false
+                        comments:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id:
+                                type: integer
+                                example: 1
+                              comment:
+                                type: string
+                                example: "확인 후 조치 예정입니다."
+                              created_at:
+                                type: string
+                                example: "2025-02-12 11:00:00"
       500:
-        description: 서버 오류 발생
+        description: 미체크 항목 목록 조회 실패
     """
     try:
         conn = get_db_connection()
@@ -1524,36 +1272,37 @@ def get_unchecked_descriptions():
         return jsonify({"success": False, "message": "미체크 항목 목록을 불러오는 중 오류 발생"}), 500
 
 
-# 24 ✅ 미체크 항목 저장
+# ✅ 미체크 항목 저장
 @app.route('/unchecked_descriptions', methods=['POST'])
 def save_unchecked_description():
     """
-    미체크 항목에 댓글 추가 API
+    미체크 항목 설명 저장 API
     ---
     tags:
-      - Unchecked Comments
-    summary: 미체크 항목에 댓글 저장
-    description:
-      특정 미체크 항목에 대한 댓글을 저장합니다.
+      - Unchecked Descriptions
+    summary: 새로운 미체크 항목 설명을 저장합니다.
+    description: 
+      사용자가 미체크 항목에 대한 설명을 입력하여 데이터베이스에 저장합니다.
     parameters:
       - in: body
         name: body
+        description: 미체크 항목 데이터
         required: true
         schema:
           type: object
           required:
-            - unchecked_id
-            - comment
+            - description
+            - training_course
           properties:
-            unchecked_id:
-              type: integer
-              example: 1
-            comment:
+            description:
               type: string
-              example: "확인 후 조치 예정입니다."
+              example: "출석 체크 시스템 오류로 인해 확인 불가"
+            training_course:
+              type: string
+              example: "데이터 분석 스쿨"
     responses:
       201:
-        description: 댓글 저장 성공
+        description: 미체크 항목 설명 저장 성공
       400:
         description: 필수 데이터 누락
       500:
@@ -1589,7 +1338,7 @@ def save_unchecked_description():
         return jsonify({"success": False, "message": "서버 오류 발생"}), 500
 
 
-# 25 ✅ 미체크 항목 댓글 저장
+# ✅ 미체크 항목 댓글 저장
 @app.route('/unchecked_comments', methods=['POST'])
 def add_unchecked_comment():
     """
@@ -1647,7 +1396,7 @@ def add_unchecked_comment():
         return jsonify({"success": False, "message": "댓글 저장 실패"}), 500
 
 
-# 26 ✅ 미체크 항목 해결
+# ✅ 미체크 항목 해결
 @app.route('/unchecked_descriptions/resolve', methods=['POST'])
 def resolve_unchecked_description():
     """
@@ -1655,9 +1404,8 @@ def resolve_unchecked_description():
     ---
     tags:
       - Unchecked Descriptions
-    summary: 특정 미체크 항목을 해결 상태로 변경
-    description:
-      사용자가 특정 미체크 항목을 해결했음을 표시합니다.
+    summary: 특정 미체크 항목을 해결 상태로 변경합니다.
+    description: 사용자가 특정 미체크 항목을 해결했음을 표시합니다.
     parameters:
       - in: body
         name: body
@@ -1674,7 +1422,7 @@ def resolve_unchecked_description():
       200:
         description: 미체크 항목 해결 성공
       400:
-        description: 필수 데이터 누락
+        description: 요청 데이터 오류
       500:
         description: 서버 오류 발생
     """
@@ -1698,17 +1446,15 @@ def resolve_unchecked_description():
         return jsonify({"success": False, "message": "미체크 항목 해결 실패"}), 500
 
 
-# 27 체크율 계산
+# 체크율 계산
 @app.route('/admin/task_status', methods=['GET'])
 def get_task_status():
     """
-    훈련 과정별 체크율 조회 API
+    훈련 과정별 업무 체크리스트의 체크율을 조회하는 API
     ---
     tags:
       - Admin
-    summary: 훈련 과정별 업무 체크 상태 조회
-    description:
-      각 훈련 과정별 업무 체크리스트의 체크율을 반환합니다.
+    summary: "훈련 과정별 업무 체크 상태 조회"
     responses:
       200:
         description: 훈련 과정별 체크율 데이터를 반환
@@ -1717,7 +1463,6 @@ def get_task_status():
           properties:
             success:
               type: boolean
-              example: true
             data:
               type: array
               items:
@@ -1725,12 +1470,10 @@ def get_task_status():
                 properties:
                   training_course:
                     type: string
-                    example: "데이터 분석 스쿨"
                   check_rate:
                     type: string
-                    example: "85%"
       500:
-        description: 서버 오류 발생
+        description: 체크 상태 조회 실패
     """
     try:
         conn = get_db_connection()
