@@ -258,7 +258,7 @@ def get_notices():
     summary: 공지사항 및 전달사항 목록 조회
     description: 
       공지사항(notices)과 전달사항(remarks)을 포함한 데이터를 반환합니다.
-      전달사항은 `type` 값이 "전달사항"인 항목만 필터링하여 제공합니다.
+      전달사항은 type 값이 "전달사항"인 항목만 필터링하여 제공합니다.
     responses:
       200:
         description: 공지사항 및 전달사항 데이터를 포함한 응답
@@ -384,7 +384,7 @@ def get_attendance():
     summary: 출퇴근 기록 조회 및 다운로드
     description: 
       출퇴근 기록을 JSON, CSV, 또는 Excel 형식으로 반환합니다.
-      기본적으로 JSON을 반환하며, `format` 파라미터를 사용하여 CSV 또는 Excel 형식으로 요청할 수 있습니다.
+      기본적으로 JSON을 반환하며, format 파라미터를 사용하여 CSV 또는 Excel 형식으로 요청할 수 있습니다.
     parameters:
       - name: format
         in: query
@@ -569,7 +569,7 @@ def get_tasks():
     summary: 업무 체크리스트 데이터 조회
     description: 
     모든 업무 체크리스트 데이터를 조회합니다.  
-    `task_category`를 기준으로 필터링할 수 있습니다.
+    task_category를 기준으로 필터링할 수 있습니다.
     parameters:
     - name: task_category
         in: query
@@ -603,7 +603,7 @@ def get_tasks():
                     type: string
                     example: "개발"
     400:
-        description: 잘못된 요청 (예: 유효하지 않은 `task_category` 값)
+        description: 잘못된 요청 (예: 유효하지 않은 task_category 값)
         schema:
         type: object
         properties:
