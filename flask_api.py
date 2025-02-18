@@ -351,20 +351,13 @@ def save_attendance():
         description: 출퇴근 기록 저장 실패
     """
     try:
-        # 세션에서 로그인한 사용자 정보 가져오기
-        if 'user' not in session:
-            return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
-
-        user_id = session['user']['id']
-        username = session['user']['username']
-
         data = request.json
         if not data:
             return jsonify({"success": False, "message": "No data provided"}), 400
 
         date = data.get('date')
         instructor = data.get('instructor')
-        instructor_name = data.get('instructor_name')
+        instructor_name = data.get('instructor_name')  # ✅ 강사명 추가
         training_course = data.get('training_course')
         check_in = data.get('check_in')
         check_out = data.get('check_out')
@@ -375,13 +368,10 @@ def save_attendance():
 
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # 로그인한 사용자 정보와 함께 출퇴근 기록 저장
         cursor.execute('''
-            INSERT INTO attendance (date, instructor, instructor_name, training_course, check_in, check_out, daily_log, user_id, username)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ''', (date, instructor, instructor_name, training_course, check_in, check_out, daily_log, user_id, username))
-        
+            INSERT INTO attendance (date, instructor, instructor_name, training_course, check_in, check_out, daily_log)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ''', (date, instructor, instructor_name, training_course, check_in, check_out, daily_log))
         conn.commit()
         cursor.close()
         conn.close()
@@ -657,16 +647,10 @@ def save_issue():
         description: 서버 오류
     """
     try:
-        if 'user' not in session:
-            return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
-
-        user_id = session['user']['id']
-        username = session['user']['username']
-
         data = request.json
-        issue_text = data.get('issue', "").strip()
-        training_course = data.get('training_course', "").strip()
-        date = data.get('date', "").strip()
+        issue_text = data.get('issue')
+        training_course = data.get('training_course')
+        date = data.get('date')
 
         if not issue_text or not training_course or not date:
             return jsonify({"success": False, "message": "이슈, 훈련 과정, 날짜를 모두 입력하세요."}), 400
@@ -674,9 +658,9 @@ def save_issue():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO issues (content, date, training_course, created_at, resolved, user_id, username)
-            VALUES (%s, %s, %s, NOW(), FALSE, %s, %s)
-        ''', (issue_text, date, training_course, user_id, username))
+            INSERT INTO issues (content, date, training_course, created_at, resolved)
+            VALUES (%s, %s, %s, NOW(), FALSE)
+        ''', (issue_text, date, training_course))
 
         conn.commit()
         cursor.close()
@@ -795,15 +779,9 @@ def add_issue_comment():
         description: 서버 오류
     """
     try:
-        if 'user' not in session:
-            return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
-
-        user_id = session['user']['id']
-        username = session['user']['username']
-
         data = request.json
         issue_id = data.get('issue_id')
-        comment = data.get('comment', "").strip()
+        comment = data.get('comment')
 
         if not issue_id or not comment:
             return jsonify({"success": False, "message": "이슈 ID와 댓글 내용을 입력하세요."}), 400
@@ -811,8 +789,8 @@ def add_issue_comment():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO issue_comments (issue_id, comment, created_at, user_id, username) VALUES (%s, %s, NOW(), %s, %s)",
-            (issue_id, comment, user_id, username)
+            "INSERT INTO issue_comments (issue_id, comment, created_at) VALUES (%s, %s, NOW())",
+            (issue_id, comment)
         )
         conn.commit()
         cursor.close()
@@ -822,7 +800,6 @@ def add_issue_comment():
     except Exception as e:
         logging.error("Error saving issue comment", exc_info=True)
         return jsonify({"success": False, "message": "댓글 저장 실패"}), 500
-
 
 # 이슈에 대한 댓글 조회
 @app.route('/issues/comments', methods=['GET'])
@@ -1354,13 +1331,10 @@ def save_unchecked_description():
         description: 서버 오류 발생
     """
     try:
-        if 'user' not in session:
-            return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
+        if not request.is_json:
+            return jsonify({"success": False, "message": "Invalid JSON format"}), 400
 
-        user_id = session['user']['id']
-        username = session['user']['username']
-
-        data = request.json
+        data = request.get_json()
         description = data.get("description", "").strip()
         training_course = data.get("training_course", "").strip()
 
@@ -1369,16 +1343,18 @@ def save_unchecked_description():
 
         conn = get_db_connection()
         cursor = conn.cursor()
+
         cursor.execute('''
-            INSERT INTO unchecked_descriptions (content, training_course, created_at, resolved, user_id, username)
-            VALUES (%s, %s, NOW(), FALSE, %s, %s)
-        ''', (description, training_course, user_id, username))
-        
+            INSERT INTO unchecked_descriptions (content, training_course, created_at, resolved)
+            VALUES (%s, %s, NOW(), FALSE)
+        ''', (description, training_course))
+
         conn.commit()
         cursor.close()
         conn.close()
 
         return jsonify({"success": True, "message": "미체크 항목 설명이 저장되었습니다!"}), 201
+
     except Exception as e:
         logging.error("Error saving unchecked description", exc_info=True)
         return jsonify({"success": False, "message": "서버 오류 발생"}), 500
@@ -1419,15 +1395,9 @@ def add_unchecked_comment():
         description: 서버 오류 발생
     """
     try:
-        if 'user' not in session:
-            return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
-
-        user_id = session['user']['id']
-        username = session['user']['username']
-
         data = request.json
         unchecked_id = data.get('unchecked_id')
-        comment = data.get('comment', "").strip()
+        comment = data.get('comment')
 
         if not unchecked_id or not comment:
             return jsonify({"success": False, "message": "미체크 항목 ID와 댓글을 입력하세요."}), 400
@@ -1435,8 +1405,8 @@ def add_unchecked_comment():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO unchecked_comments (unchecked_id, comment, created_at, user_id, username) VALUES (%s, %s, NOW(), %s, %s)",
-            (unchecked_id, comment, user_id, username)
+            "INSERT INTO unchecked_comments (unchecked_id, comment, created_at) VALUES (%s, %s, NOW())",
+            (unchecked_id, comment)
         )
         conn.commit()
         cursor.close()
