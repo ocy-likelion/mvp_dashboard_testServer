@@ -484,7 +484,7 @@ def get_tasks():
 @app.route('/tasks', methods=['POST'])
 def save_tasks():
     """
-    업무 체크리스트 저장 API (새로운 기록 추가, 기존 데이터는 유지)
+    업무 체크리스트 저장 API (체크 여부와 관계없이 모든 데이터 저장)
     ---
     tags:
       - Tasks
@@ -504,28 +504,22 @@ def save_tasks():
                   - task_name
                   - is_checked
                 properties:
-                  dtask_name:
+                  task_name:
                     type: string
-                  is_checke:
+                  is_checked:
                     type: boolean
+            training_course:
+              type: string
     responses:
       201:
-        description: 업무 체크리스트 업데이트 성공
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-            message:
-              type: string
+        description: 업무 체크리스트 저장 성공
       400:
-        description: 업데이트할 데이터 없음
+        description: 요청 데이터 없음
       500:
-        description: 업무 체크리스트 업데이트 실패
+        description: 업무 체크리스트 저장 실패
     """
     try:
         data = request.json
-        print("ata", data)
         updates = data.get("updates")
         training_course = data.get("training_course")
 
@@ -537,7 +531,7 @@ def save_tasks():
 
         for update in updates:
             task_name = update.get("task_name")
-            is_checked = update.get("is_checked")
+            is_checked = update.get("is_checked", False)  # ✅ 체크 여부 기본값 False
 
             # task_id 찾기
             cursor.execute("SELECT id FROM task_items WHERE task_name = %s", (task_name,))
@@ -561,6 +555,7 @@ def save_tasks():
     except Exception as e:
         logging.error("Error saving tasks", exc_info=True)
         return jsonify({"success": False, "message": "Failed to save tasks"}), 500
+
 
 
 @app.route('/remarks', methods=['POST'])
