@@ -1191,44 +1191,6 @@ def get_training_info():
         return jsonify({"success": False, "message": "Failed to fetch training info"}), 500
 
 
-# # ✅ 미체크 항목의 설명 불러오기
-# @app.route('/unchecked_descriptions', methods=['GET'])
-# def get_unchecked_descriptions():
-#     """
-#     미체크 항목 설명 목록 조회 API
-#     - 과정별(is_checked=False) 체크리스트 조회
-#     """
-#     try:
-#         conn = get_db_connection()
-#         cursor = conn.cursor()
-
-#         cursor.execute("""
-#             SELECT training_course, json_agg(json_build_object(
-#                 'task_name', ti.task_name,
-#                 'checked_date', tc.checked_date
-#             )) AS unchecked_items
-#             FROM task_checklist tc
-#             JOIN task_items ti ON tc.task_id = ti.id
-#             WHERE tc.is_checked = FALSE
-#             GROUP BY training_course
-#             ORDER BY MIN(tc.checked_date) DESC;
-#         """)
-
-#         unchecked_grouped = cursor.fetchall()
-#         cursor.close()
-#         conn.close()
-
-#         return jsonify({
-#             "success": True,
-#             "data": [
-#                 {"training_course": row[0], "unchecked_items": row[1]} for row in unchecked_grouped
-#             ]
-#         }), 200
-#     except Exception as e:
-#         logging.error("Error retrieving unchecked descriptions", exc_info=True)
-#         return jsonify({"success": False, "message": "미체크 항목 목록을 불러오는 중 오류 발생"}), 500
-
-
 
 # ✅ 미체크 항목의 설명 불러오기
 @app.route('/unchecked_descriptions', methods=['GET'])
@@ -1309,43 +1271,6 @@ def get_unchecked_descriptions():
     except Exception as e:
         logging.error("Error retrieving unchecked descriptions", exc_info=True)
         return jsonify({"success": False, "message": "미체크 항목 목록을 불러오는 중 오류 발생"}), 500
-    # try:
-    #     conn = get_db_connection()
-    #     cursor = conn.cursor()
-
-    #     cursor.execute('''
-    #         SELECT training_course, json_agg(json_build_object(
-    #             'id', ud.id, 
-    #             'content', ud.content, 
-    #             'created_at', ud.created_at, 
-    #             'resolved', ud.resolved,
-    #             'comments', (
-    #                 SELECT json_agg(json_build_object(
-    #                     'id', uc.id, 
-    #                     'comment', uc.comment, 
-    #                     'created_at', uc.created_at
-    #                 )) FROM unchecked_comments uc WHERE uc.unchecked_id = ud.id
-    #             )
-    #         )) AS unchecked_items
-    #         FROM unchecked_descriptions ud
-    #         WHERE ud.resolved = FALSE  
-    #         GROUP BY training_course
-    #         ORDER BY MIN(ud.created_at) DESC;
-    #     ''')
-    #     unchecked_grouped = cursor.fetchall()
-
-    #     cursor.close()
-    #     conn.close()
-
-    #     return jsonify({
-    #         "success": True,
-    #         "data": [
-    #             {"training_course": row[0], "unchecked_items": row[1]} for row in unchecked_grouped
-    #         ]
-    #     }), 200
-    # except Exception as e:
-    #     logging.error("Error retrieving unchecked descriptions", exc_info=True)
-    #     return jsonify({"success": False, "message": "미체크 항목 목록을 불러오는 중 오류 발생"}), 500
 
 
 # ✅ 미체크 항목 저장
@@ -1525,6 +1450,69 @@ def resolve_unchecked_description():
     except Exception as e:
         logging.error("Error resolving unchecked description", exc_info=True)
         return jsonify({"success": False, "message": "미체크 항목 해결 실패"}), 500
+
+# 미체크 항목 댓글 불러오기
+@app.route('/unchecked_comments', methods=['GET'])
+def get_unchecked_comments():
+    """
+    미체크 항목의 댓글 조회 API
+    --- 
+    tags:
+      - Unchecked Comments
+    summary: "특정 미체크 항목의 댓글 목록을 조회합니다."
+    parameters:
+      - name: unchecked_id
+        in: query
+        type: integer
+        required: true
+        description: "조회할 미체크 항목 ID"
+    responses:
+      200:
+        description: 미체크 항목의 댓글 목록 반환
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  comment:
+                    type: string
+                  created_at:
+                    type: string
+      400:
+        description: "미체크 항목 ID 누락"
+      500:
+        description: "댓글 조회 실패"
+    """
+    try:
+        unchecked_id = request.args.get('unchecked_id')
+
+        if not unchecked_id:
+            return jsonify({"success": False, "message": "미체크 항목 ID를 입력하세요."}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, comment, created_at FROM unchecked_comments WHERE unchecked_id = %s ORDER BY created_at ASC",
+            (unchecked_id,)
+        )
+        comments = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "data": [{"id": row[0], "comment": row[1], "created_at": row[2]} for row in comments]
+        }), 200
+    except Exception as e:
+        logging.error("Error retrieving unchecked comments", exc_info=True)
+        return jsonify({"success": False, "message": "미체크 항목 댓글 조회 실패"}), 500
 
 
 # 체크율 계산
