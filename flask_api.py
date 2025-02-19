@@ -1560,11 +1560,13 @@ def get_task_status():
         conn = get_db_connection()
         cursor = conn.cursor()
 
+        # ✅ 당일 체크된 데이터만 집계
         cursor.execute('''
             SELECT training_course, 
                    COUNT(*) AS total_tasks, 
                    SUM(CASE WHEN is_checked THEN 1 ELSE 0 END) AS checked_tasks
             FROM task_checklist
+            WHERE DATE(checked_date) = CURRENT_DATE  -- 🔥 당일 체크된 데이터만 필터링
             GROUP BY training_course
         ''')
         results = cursor.fetchall()
@@ -1577,12 +1579,12 @@ def get_task_status():
             total_tasks = row[1]
             checked_tasks = row[2] if row[2] else 0
             check_rate = round((checked_tasks / total_tasks) * 100, 2) if total_tasks > 0 else 0
-            
+
             task_status.append({
                 "training_course": training_course,
                 "check_rate": f"{check_rate}%"
             })
-        
+
         return jsonify({"success": True, "data": task_status}), 200
     except Exception as e:
         logging.error("Error retrieving task status", exc_info=True)
