@@ -1518,7 +1518,7 @@ def get_task_status():
     ---
     tags:
       - Admin
-    summary: "훈련 과정별 업무 체크 상태 조회"
+    summary: "훈련 과정별 업무 체크 상태 및 부서 정보 조회"
     responses:
       200:
         description: 훈련 과정별 체크율 데이터를 반환
@@ -1534,6 +1534,8 @@ def get_task_status():
                 properties:
                   training_course:
                     type: string
+                  dept:
+                    type: string
                   check_rate:
                     type: string
       500:
@@ -1543,14 +1545,15 @@ def get_task_status():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # ✅ 당일 체크된 데이터만 집계
+        # ✅ training_info 테이블을 조인하여 dept 정보 포함
         cursor.execute('''
-            SELECT training_course, 
+            SELECT tc.training_course, ti.dept, 
                    COUNT(*) AS total_tasks, 
-                   SUM(CASE WHEN is_checked THEN 1 ELSE 0 END) AS checked_tasks
-            FROM task_checklist
-            WHERE DATE(checked_date) = CURRENT_DATE  -- 🔥 당일 체크된 데이터만 필터링
-            GROUP BY training_course
+                   SUM(CASE WHEN tc.is_checked THEN 1 ELSE 0 END) AS checked_tasks
+            FROM task_checklist tc
+            JOIN training_info ti ON tc.training_course = ti.training_course
+            WHERE DATE(tc.checked_date) = CURRENT_DATE  -- 🔥 당일 체크된 데이터만 필터링
+            GROUP BY tc.training_course, ti.dept
         ''')
         results = cursor.fetchall()
         cursor.close()
@@ -1559,12 +1562,14 @@ def get_task_status():
         task_status = []
         for row in results:
             training_course = row[0]
-            total_tasks = row[1]
-            checked_tasks = row[2] if row[2] else 0
+            dept = row[1]
+            total_tasks = row[2]
+            checked_tasks = row[3] if row[3] else 0
             check_rate = round((checked_tasks / total_tasks) * 100, 2) if total_tasks > 0 else 0
 
             task_status.append({
                 "training_course": training_course,
+                "dept": dept,
                 "check_rate": f"{check_rate}%"
             })
 
@@ -1572,6 +1577,7 @@ def get_task_status():
     except Exception as e:
         logging.error("Error retrieving task status", exc_info=True)
         return jsonify({"success": False, "message": "Failed to retrieve task status"}), 500
+
 
 
 # ------------------- API 엔드포인트 문서화 끝 -------------------
