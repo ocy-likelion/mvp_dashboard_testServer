@@ -175,8 +175,34 @@ def login():
 # ✅ 로그아웃 API
 @app.route('/logout', methods=['POST'])
 def logout():
-    session.pop('user', None)
+    """
+    로그아웃 API
+    ---
+    tags:
+      - Auth
+    summary: "사용자 로그아웃"
+    responses:
+      200:
+        description: 로그아웃 성공
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "로그아웃 완료!"
+      401:
+        description: 이미 로그아웃된 상태
+    """
+    if 'user' not in session:
+        return jsonify({"success": False, "message": "이미 로그아웃된 상태입니다."}), 401
+
+    session.clear()  # ✅ 세션 전체 삭제 (user뿐만 아니라 모든 세션 데이터 삭제)
+    
     return jsonify({"success": True, "message": "로그아웃 완료!"}), 200
+
 
 
 # ✅ 로그인 상태 확인 API
@@ -1601,11 +1627,11 @@ def get_unchecked_comments():
 @app.route('/admin/task_status', methods=['GET'])
 def get_task_status():
     """
-    훈련 과정별 업무 체크리스트의 체크율을 조회하는 API
+    훈련 과정별 업무 체크리스트의 체크율을 조회하는 API (로그인한 사용자 정보 포함)
     ---
     tags:
       - Admin
-    summary: "훈련 과정별 업무 체크 상태 및 부서 정보 조회"
+    summary: "훈련 과정별 업무 체크 상태 조회 (로그인한 사용자 포함)"
     responses:
       200:
         description: 훈련 과정별 체크율 데이터를 반환
@@ -1614,6 +1640,12 @@ def get_task_status():
           properties:
             success:
               type: boolean
+            user:
+              type: object
+              properties:
+                username:
+                  type: string
+                  example: "admin"
             data:
               type: array
               items:
@@ -1625,9 +1657,17 @@ def get_task_status():
                     type: string
                   check_rate:
                     type: string
+      401:
+        description: 로그인 필요
       500:
         description: 체크 상태 조회 실패
     """
+    # ✅ 로그인 여부 확인
+    if 'user' not in session:
+        return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
+
+    username = session['user']['username']  # ✅ 현재 로그인한 사용자 정보 가져오기
+
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -1660,11 +1700,18 @@ def get_task_status():
                 "check_rate": f"{check_rate}%"
             })
 
-        return jsonify({"success": True, "data": task_status}), 200
+        # ✅ 응답에 로그인한 사용자 정보 포함
+        return jsonify({
+            "success": True,
+            "user": {
+                "username": username
+            },
+            "data": task_status
+        }), 200
+
     except Exception as e:
         logging.error("Error retrieving task status", exc_info=True)
         return jsonify({"success": False, "message": "Failed to retrieve task status"}), 500
-
 
 
 # ------------------- API 엔드포인트 문서화 끝 -------------------
