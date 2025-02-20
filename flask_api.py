@@ -62,8 +62,79 @@ def healthcheck():
 
 
 # ✅ 로그인 API
+# @app.route('/login', methods=['POST'])
+# def login():
+#     data = request.json
+#     username = data.get('username')
+#     password = data.get('password')
+
+#     if not username or not password:
+#         return jsonify({"success": False, "message": "ID와 비밀번호를 입력하세요."}), 400
+
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+#         cursor.execute("SELECT id, password FROM users WHERE username = %s", (username,))
+#         user = cursor.fetchone()
+#         cursor.close()
+#         conn.close()
+
+#         if not user or user[1] != password:
+#             return jsonify({"success": False, "message": "잘못된 ID 또는 비밀번호입니다."}), 401
+
+#         session['user'] = {"id": user[0], "username": username}
+#         return jsonify({"success": True, "message": "로그인 성공!"}), 200
+
+#     except Exception as e:
+#         logging.error("로그인 오류", exc_info=True)
+#         return jsonify({"success": False, "message": "서버 오류 발생"}), 500
 @app.route('/login', methods=['POST'])
 def login():
+    """
+    로그인 API
+    ---
+    tags:
+      - Auth
+    summary: "사용자 로그인"
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          properties:
+            username:
+              type: string
+              example: "admin"
+            password:
+              type: string
+              example: "password123"
+    responses:
+      200:
+        description: 로그인 성공
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "로그인 성공!"
+            user:
+              type: object
+              properties:
+                id:
+                  type: integer
+                  example: 1
+                username:
+                  type: string
+                  example: "admin"
+      401:
+        description: 로그인 실패
+      500:
+        description: 서버 오류 발생
+    """
     data = request.json
     username = data.get('username')
     password = data.get('password')
@@ -74,16 +145,27 @@ def login():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, password FROM users WHERE username = %s", (username,))
+
+        # ✅ username을 기준으로 사용자 조회
+        cursor.execute("SELECT id, username, password FROM users WHERE username = %s", (username,))
         user = cursor.fetchone()
         cursor.close()
         conn.close()
 
-        if not user or user[1] != password:
+        if not user or user[2] != password:
             return jsonify({"success": False, "message": "잘못된 ID 또는 비밀번호입니다."}), 401
 
-        session['user'] = {"id": user[0], "username": username}
-        return jsonify({"success": True, "message": "로그인 성공!"}), 200
+        # ✅ 세션에 username도 함께 저장
+        session['user'] = {"id": user[0], "username": user[1]}
+
+        return jsonify({
+            "success": True,
+            "message": "로그인 성공!",
+            "user": {
+                "id": user[0],
+                "username": user[1]
+            }
+        }), 200
 
     except Exception as e:
         logging.error("로그인 오류", exc_info=True)
@@ -484,7 +566,7 @@ def get_tasks():
 @app.route('/tasks', methods=['POST'])
 def save_tasks():
     """
-    업무 체크리스트 저장 API (체크 여부와 관계없이 모든 데이터 저장)
+    업무 체크리스트 저장 API (체크 여부와 함께 로그인한 사용자명 저장)
     ---
     tags:
       - Tasks
@@ -514,11 +596,15 @@ def save_tasks():
       201:
         description: 업무 체크리스트 저장 성공
       400:
-        description: 요청 데이터 없음
+        description: 요청 데이터 없음 또는 로그인 필요
       500:
         description: 업무 체크리스트 저장 실패
     """
     try:
+        if 'user' not in session:
+            return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
+
+        username = session['user']['username']  # ✅ 현재 로그인한 사용자의 username 가져오기
         data = request.json
         updates = data.get("updates")
         training_course = data.get("training_course")
@@ -541,11 +627,11 @@ def save_tasks():
 
             task_id = task_item[0]
 
-            # ✅ 기존 데이터를 유지하면서 새로운 행을 INSERT (업데이트 없음)
-            cursor.execute("""
-                INSERT INTO task_checklist (task_id, training_course, is_checked, checked_date)
-                VALUES (%s, %s, %s, NOW());
-            """, (task_id, training_course, is_checked))
+            # ✅ username을 함께 저장
+            cursor.execute('''
+                INSERT INTO task_checklist (task_id, training_course, is_checked, checked_date, username)
+                VALUES (%s, %s, %s, NOW(), %s);
+            ''', (task_id, training_course, is_checked, username))
 
         conn.commit()
         cursor.close()
@@ -555,6 +641,7 @@ def save_tasks():
     except Exception as e:
         logging.error("Error saving tasks", exc_info=True)
         return jsonify({"success": False, "message": "Failed to save tasks"}), 500
+
 
 
 
