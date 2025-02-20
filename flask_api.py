@@ -62,79 +62,8 @@ def healthcheck():
 
 
 # ✅ 로그인 API
-# @app.route('/login', methods=['POST'])
-# def login():
-#     data = request.json
-#     username = data.get('username')
-#     password = data.get('password')
-
-#     if not username or not password:
-#         return jsonify({"success": False, "message": "ID와 비밀번호를 입력하세요."}), 400
-
-#     try:
-#         conn = get_db_connection()
-#         cursor = conn.cursor()
-#         cursor.execute("SELECT id, password FROM users WHERE username = %s", (username,))
-#         user = cursor.fetchone()
-#         cursor.close()
-#         conn.close()
-
-#         if not user or user[1] != password:
-#             return jsonify({"success": False, "message": "잘못된 ID 또는 비밀번호입니다."}), 401
-
-#         session['user'] = {"id": user[0], "username": username}
-#         return jsonify({"success": True, "message": "로그인 성공!"}), 200
-
-#     except Exception as e:
-#         logging.error("로그인 오류", exc_info=True)
-#         return jsonify({"success": False, "message": "서버 오류 발생"}), 500
 @app.route('/login', methods=['POST'])
 def login():
-    """
-    로그인 API
-    ---
-    tags:
-      - Auth
-    summary: "사용자 로그인"
-    parameters:
-      - in: body
-        name: body
-        required: true
-        schema:
-          type: object
-          properties:
-            username:
-              type: string
-              example: "admin"
-            password:
-              type: string
-              example: "password123"
-    responses:
-      200:
-        description: 로그인 성공
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              example: true
-            message:
-              type: string
-              example: "로그인 성공!"
-            user:
-              type: object
-              properties:
-                id:
-                  type: integer
-                  example: 1
-                username:
-                  type: string
-                  example: "admin"
-      401:
-        description: 로그인 실패
-      500:
-        description: 서버 오류 발생
-    """
     data = request.json
     username = data.get('username')
     password = data.get('password')
@@ -145,27 +74,16 @@ def login():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-
-        # ✅ username을 기준으로 사용자 조회
-        cursor.execute("SELECT id, username, password FROM users WHERE username = %s", (username,))
+        cursor.execute("SELECT id, password FROM users WHERE username = %s", (username,))
         user = cursor.fetchone()
         cursor.close()
         conn.close()
 
-        if not user or user[2] != password:
+        if not user or user[1] != password:
             return jsonify({"success": False, "message": "잘못된 ID 또는 비밀번호입니다."}), 401
 
-        # ✅ 세션에 username도 함께 저장
-        session['user'] = {"id": user[0], "username": user[1]}
-
-        return jsonify({
-            "success": True,
-            "message": "로그인 성공!",
-            "user": {
-                "id": user[0],
-                "username": user[1]
-            }
-        }), 200
+        session['user'] = {"id": user[0], "username": username}
+        return jsonify({"success": True, "message": "로그인 성공!"}), 200
 
     except Exception as e:
         logging.error("로그인 오류", exc_info=True)
@@ -175,34 +93,8 @@ def login():
 # ✅ 로그아웃 API
 @app.route('/logout', methods=['POST'])
 def logout():
-    """
-    로그아웃 API
-    ---
-    tags:
-      - Auth
-    summary: "사용자 로그아웃"
-    responses:
-      200:
-        description: 로그아웃 성공
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              example: true
-            message:
-              type: string
-              example: "로그아웃 완료!"
-      401:
-        description: 이미 로그아웃된 상태
-    """
-    if 'user' not in session:
-        return jsonify({"success": False, "message": "이미 로그아웃된 상태입니다."}), 401
-
-    session.clear()  # ✅ 세션 전체 삭제 (user뿐만 아니라 모든 세션 데이터 삭제)
-    
+    session.pop('user', None)
     return jsonify({"success": True, "message": "로그아웃 완료!"}), 200
-
 
 
 # ✅ 로그인 상태 확인 API
@@ -592,7 +484,7 @@ def get_tasks():
 @app.route('/tasks', methods=['POST'])
 def save_tasks():
     """
-    업무 체크리스트 저장 API (체크 여부와 함께 로그인한 사용자명 저장)
+    업무 체크리스트 저장 API (체크 여부와 관계없이 모든 데이터 저장)
     ---
     tags:
       - Tasks
@@ -622,15 +514,11 @@ def save_tasks():
       201:
         description: 업무 체크리스트 저장 성공
       400:
-        description: 요청 데이터 없음 또는 로그인 필요
+        description: 요청 데이터 없음
       500:
         description: 업무 체크리스트 저장 실패
     """
     try:
-        if 'user' not in session:
-            return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
-
-        username = session['user']['username']  # ✅ 현재 로그인한 사용자의 username 가져오기
         data = request.json
         updates = data.get("updates")
         training_course = data.get("training_course")
@@ -653,11 +541,11 @@ def save_tasks():
 
             task_id = task_item[0]
 
-            # ✅ username을 함께 저장
-            cursor.execute('''
-                INSERT INTO task_checklist (task_id, training_course, is_checked, checked_date, username)
-                VALUES (%s, %s, %s, NOW(), %s);
-            ''', (task_id, training_course, is_checked, username))
+            # ✅ 기존 데이터를 유지하면서 새로운 행을 INSERT (업데이트 없음)
+            cursor.execute("""
+                INSERT INTO task_checklist (task_id, training_course, is_checked, checked_date)
+                VALUES (%s, %s, %s, NOW());
+            """, (task_id, training_course, is_checked))
 
         conn.commit()
         cursor.close()
@@ -667,7 +555,6 @@ def save_tasks():
     except Exception as e:
         logging.error("Error saving tasks", exc_info=True)
         return jsonify({"success": False, "message": "Failed to save tasks"}), 500
-
 
 
 
@@ -1627,11 +1514,11 @@ def get_unchecked_comments():
 @app.route('/admin/task_status', methods=['GET'])
 def get_task_status():
     """
-    훈련 과정별 업무 체크리스트의 체크율을 조회하는 API (로그인한 사용자 정보 포함)
+    훈련 과정별 업무 체크리스트의 체크율을 조회하는 API
     ---
     tags:
       - Admin
-    summary: "훈련 과정별 업무 체크 상태 조회 (로그인한 사용자 포함)"
+    summary: "훈련 과정별 업무 체크 상태 조회"
     responses:
       200:
         description: 훈련 과정별 체크율 데이터를 반환
@@ -1640,12 +1527,6 @@ def get_task_status():
           properties:
             success:
               type: boolean
-            user:
-              type: object
-              properties:
-                username:
-                  type: string
-                  example: "admin"
             data:
               type: array
               items:
@@ -1653,34 +1534,23 @@ def get_task_status():
                 properties:
                   training_course:
                     type: string
-                  dept:
-                    type: string
                   check_rate:
                     type: string
-      401:
-        description: 로그인 필요
       500:
         description: 체크 상태 조회 실패
     """
-    # ✅ 로그인 여부 확인
-    if 'user' not in session:
-        return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
-
-    username = session['user']['username']  # ✅ 현재 로그인한 사용자 정보 가져오기
-
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # ✅ training_info 테이블을 조인하여 dept 정보 포함
+        # ✅ 당일 체크된 데이터만 집계
         cursor.execute('''
-            SELECT tc.training_course, ti.dept, 
+            SELECT training_course, 
                    COUNT(*) AS total_tasks, 
-                   SUM(CASE WHEN tc.is_checked THEN 1 ELSE 0 END) AS checked_tasks
-            FROM task_checklist tc
-            JOIN training_info ti ON tc.training_course = ti.training_course
-            WHERE DATE(tc.checked_date) = CURRENT_DATE  -- 🔥 당일 체크된 데이터만 필터링
-            GROUP BY tc.training_course, ti.dept
+                   SUM(CASE WHEN is_checked THEN 1 ELSE 0 END) AS checked_tasks
+            FROM task_checklist
+            WHERE DATE(checked_date) = CURRENT_DATE  -- 🔥 당일 체크된 데이터만 필터링
+            GROUP BY training_course
         ''')
         results = cursor.fetchall()
         cursor.close()
@@ -1689,26 +1559,16 @@ def get_task_status():
         task_status = []
         for row in results:
             training_course = row[0]
-            dept = row[1]
-            total_tasks = row[2]
-            checked_tasks = row[3] if row[3] else 0
+            total_tasks = row[1]
+            checked_tasks = row[2] if row[2] else 0
             check_rate = round((checked_tasks / total_tasks) * 100, 2) if total_tasks > 0 else 0
 
             task_status.append({
                 "training_course": training_course,
-                "dept": dept,
                 "check_rate": f"{check_rate}%"
             })
 
-        # ✅ 응답에 로그인한 사용자 정보 포함
-        return jsonify({
-            "success": True,
-            "user": {
-                "username": username
-            },
-            "data": task_status
-        }), 200
-
+        return jsonify({"success": True, "data": task_status}), 200
     except Exception as e:
         logging.error("Error retrieving task status", exc_info=True)
         return jsonify({"success": False, "message": "Failed to retrieve task status"}), 500
