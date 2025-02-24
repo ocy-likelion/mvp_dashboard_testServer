@@ -1510,7 +1510,7 @@ def get_unchecked_comments():
         return jsonify({"success": False, "message": "미체크 항목 댓글 조회 실패"}), 500
 
 
-# 체크율 계산
+# 당일 체크율 계산
 @app.route('/admin/task_status', methods=['GET'])
 def get_task_status():
     """
@@ -1577,6 +1577,50 @@ def get_task_status():
     except Exception as e:
         logging.error("Error retrieving task status", exc_info=True)
         return jsonify({"success": False, "message": "Failed to retrieve task status"}), 500
+
+
+# 전체 체크율 계산
+@app.route('/admin/task_status_overall', methods=['GET'])
+def get_overall_task_status():
+    """
+    훈련 과정별 전체 체크율을 조회하는 API
+    ---
+    responses:
+      200:
+        description: 훈련 과정별 전체 체크율 데이터 반환
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT tc.training_course, ti.dept, 
+                   COUNT(*) AS total_tasks, 
+                   SUM(CASE WHEN tc.is_checked THEN 1 ELSE 0 END) AS checked_tasks
+            FROM task_checklist tc
+            JOIN training_info ti ON tc.training_course = ti.training_course
+            GROUP BY tc.training_course, ti.dept
+        ''')
+        
+        results = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        task_status = []
+        for row in results:
+            training_course, dept, total_tasks, checked_tasks = row
+            check_rate = round((checked_tasks / total_tasks) * 100, 2) if total_tasks > 0 else 0
+
+            task_status.append({
+                "training_course": training_course,
+                "dept": dept,
+                "check_rate": f"{check_rate}%"
+            })
+
+        return jsonify({"success": True, "data": task_status}), 200
+    except Exception as e:
+        logging.error("Error retrieving overall task status", exc_info=True)
+        return jsonify({"success": False, "message": "Failed to retrieve overall task status"}), 500
 
 
 
