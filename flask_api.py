@@ -1053,7 +1053,7 @@ def download_issues(cursor):
         columns = ["ID", "이슈 내용", "날짜", "훈련 과정", "생성일", "해결됨"]
         df = pd.DataFrame(issues, columns=columns)
 
-        # ✅ Excel 파일 생성 및 반환
+        # ✅ Excel 파일 생성 및 반환 
         return generate_excel_file(df, "이슈사항.xlsx")
 
     except Exception as e:
