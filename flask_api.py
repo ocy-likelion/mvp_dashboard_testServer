@@ -7,6 +7,10 @@ from dotenv import load_dotenv
 import os, psycopg2
 import logging
 from datetime import datetime
+from psycopg2 import pool
+from functools import wraps
+
+
 
 # 로깅 설정
 logging.basicConfig(level=logging.ERROR)
@@ -25,17 +29,46 @@ swagger = Swagger(app)  # Flasgger 초기화
 # ✅ .env 파일에서 환경 변수 로드
 load_dotenv()
 
-# PostgreSQL 데이터베이스 연결 함수
+# 환경 변수에서 DB URL 가져오기
+DATABASE_URL = os.getenv("DATABASE_URL") # ✅ 환경 변수 읽기
+
+# 커넥션 풀 생성 (최소 1개, 최대 10개 연결 유지)
+connection_pool = pool.SimpleConnectionPool(
+    minconn=1,  # 최소 유지할 DB 연결 개수
+    maxconn=10,  # 최대 DB 연결 개수
+    dsn=DATABASE_URL
+)
+
+# 커넥션 풀에서 DB 연결 가져오기
 def get_db_connection():
-    DATABASE_URL = os.getenv("DATABASE_URL")  # ✅ 환경 변수 읽기
+    return connection_pool.getconn()
+
+# 사용한 DB 연결을 반환하는 함수
+def release_db_connection(conn):
+    connection_pool.putconn(conn)
+
+# # PostgreSQL 데이터베이스 연결 함수
+# def get_db_connection():
+#     DATABASE_URL = os.getenv("DATABASE_URL")  
     
-    # 환경 변수가 없으면 강제 설정 (백업용, 하지만 로컬에서는 .env가 있으므로 필요 없음)
-    if not DATABASE_URL:
-        DATABASE_URL = "postgresql://cysss:QJxyP6VuLMAZykzMyeRtO3QJUGMf0aWA@dpg-cuim9pogph6c73acoj0g-a/mvp_dashboard"
-    
-    conn = psycopg2.connect(DATABASE_URL)
-    return conn
-    
+#     conn = psycopg2.connect(DATABASE_URL)
+#     return conn
+
+# ✅ 공통적으로 사용할 DB 연결 데코레이터
+def with_db_connection(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            return func(cursor, *args, **kwargs)  # ✅ API 함수 실행
+        except Exception as e:
+            logging.error("Database error", exc_info=True)
+            return jsonify({"success": False, "message": "Database error"}), 500
+        finally:
+            cursor.close()
+            release_db_connection(conn)  # ✅ 커넥션 반환
+    return wrapper
 
 # ------------------- API 엔드포인트 문서화 시작 -------------------
 
@@ -57,13 +90,16 @@ def get_db_connection():
         }
     }
 })
-def healthcheck():
+@with_db_connection
+def healthcheck(cursor):
+    cursor.execute("SELECT 1")  # 간단한 쿼리 실행 (DB 연결 확인)
     return jsonify({"status": "ok", "message": "Service is running!"}), 200
 
 
 # ✅ 로그인 API
 @app.route('/login', methods=['POST'])
-def login():
+@with_db_connection
+def login(cursor):
     data = request.json
     username = data.get('username')
     password = data.get('password')
@@ -71,23 +107,14 @@ def login():
     if not username or not password:
         return jsonify({"success": False, "message": "ID와 비밀번호를 입력하세요."}), 400
 
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, password FROM users WHERE username = %s", (username,))
-        user = cursor.fetchone()
-        cursor.close()
-        conn.close()
+    cursor.execute("SELECT id, password FROM users WHERE username = %s", (username,))
+    user = cursor.fetchone()
 
-        if not user or user[1] != password:
-            return jsonify({"success": False, "message": "잘못된 ID 또는 비밀번호입니다."}), 401
+    if not user or user[1] != password:
+        return jsonify({"success": False, "message": "잘못된 ID 또는 비밀번호입니다."}), 401
 
-        session['user'] = {"id": user[0], "username": username}
-        return jsonify({"success": True, "message": "로그인 성공!"}), 200
-
-    except Exception as e:
-        logging.error("로그인 오류", exc_info=True)
-        return jsonify({"success": False, "message": "서버 오류 발생"}), 500
+    session['user'] = {"id": user[0], "username": username}
+    return jsonify({"success": True, "message": "로그인 성공!"}), 200
 
 
 # ✅ 로그아웃 API
@@ -152,7 +179,8 @@ def admin():
 
 
 @app.route('/notices', methods=['GET'])
-def get_notices():
+@with_db_connection
+def get_notices(cursor):
     """
     공지사항 및 전달사항 조회 API
     ---
@@ -178,29 +206,15 @@ def get_notices():
       500:
         description: 공지사항을 불러오는 데 실패함
     """
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        # 공지사항과 전달사항을 모두 불러옴
-        cursor.execute('SELECT * FROM notices ORDER BY date DESC')
-        notices = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        # '전달사항'만 필터링하여 별도로 제공 (notice[1]가 타입으로 가정)
-        return jsonify({
-            "success": True,
-            "data": {
-                "notices": notices,
-                "remarks": [notice for notice in notices if notice[1] == '전달사항']
-            }
-        }), 200
-    except Exception as e:
-        logging.error("Error retrieving notices", exc_info=True)
-        return jsonify({"success": False, "message": "Failed to retrieve notices"}), 500
+    cursor.execute("SELECT * FROM notices ORDER BY date DESC")
+    notices = cursor.fetchall()
+    return jsonify({"success": True, "data": notices}), 200
+
 
 # 과정명 선택할 수 있는 드롭다운 설정
 @app.route('/training_courses', methods=['GET'])
-def get_training_courses():
+@with_db_connection
+def get_training_courses(cursor):
     """
     training_info 테이블에서 training_course 목록을 가져오는 API
     ---
@@ -219,25 +233,46 @@ def get_training_courses():
               items:
                 type: string
     """
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT training_course FROM training_info ORDER BY start_date DESC")
-        courses = cursor.fetchall()
-        cursor.close()
-        conn.close()
+    limit = int(request.args.get('limit', 10))
+    offset = int(request.args.get('offset', 0))
 
-        return jsonify({
-            "success": True,
-            "data": [course[0] for course in courses]  # 리스트 형태로 반환
-        }), 200
-    except Exception as e:
-        logging.error("Error fetching training courses", exc_info=True)
-        return jsonify({"success": False, "message": "Failed to fetch training courses"}), 500
+    cursor.execute("SELECT training_course FROM training_info ORDER BY start_date DESC LIMIT %s OFFSET %s", (limit, offset))
+    courses = cursor.fetchall()
+
+    return jsonify({"success": True, "data": [course[0] for course in courses]}), 200
 
 
+##### 다운로드 기능을 위한 함수
+def generate_excel_file(df, filename):
+    """Excel 파일을 생성하여 반환하는 함수"""
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name="데이터")
+    output.seek(0)
+    return send_file(
+        output,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=filename
+    )
+
+def generate_csv_file(df, filename):
+    """CSV 파일 생성 및 반환"""
+    output = io.StringIO()
+    df.to_csv(output, index=False)
+    output.seek(0)
+    return send_file(
+        io.BytesIO(output.getvalue().encode('utf-8')),
+        mimetype="text/csv",
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+# 최적화 완료
 @app.route('/attendance', methods=['GET'])
-def get_attendance():
+@with_db_connection
+def get_attendance(cursor):
     """
     출퇴근 기록 파일 다운로드 API
     ---
@@ -249,6 +284,16 @@ def get_attendance():
         type: string
         required: false
         description: "csv 또는 excel 형식으로 다운로드 (기본값 JSON 반환)"
+      - name: limit
+        in: query
+        type: integer
+        required: false
+        description: "출퇴근 기록의 최대 반환 개수 (기본값: 100)"
+      - name: offset
+        in: query
+        type: integer
+        required: false
+        description: "조회 시작 위치 (기본값: 0)"
     responses:
       200:
         description: 출퇴근 기록 데이터 반환 또는 파일 다운로드
@@ -256,14 +301,20 @@ def get_attendance():
         description: 데이터 조회 실패
     """
     try:
-        format_type = request.args.get('format', 'json')  # 기본값 JSON
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('SELECT id, date, instructor, training_course, check_in, check_out, daily_log FROM attendance ORDER BY date DESC')
-        attendance_records = cursor.fetchall()
-        cursor.close()
-        conn.close()
+        format_type = request.args.get('format', 'json')  # 기본값: JSON
+        limit = int(request.args.get('limit', 100))  # 기본 100개 반환
+        offset = int(request.args.get('offset', 0))
 
+        # ✅ 출퇴근 기록 조회 (Pagination 적용)
+        cursor.execute('''
+            SELECT id, date, instructor, training_course, check_in, check_out, daily_log 
+            FROM attendance 
+            ORDER BY date DESC 
+            LIMIT %s OFFSET %s
+        ''', (limit, offset))
+        attendance_records = cursor.fetchall()
+
+        # ✅ 데이터프레임 생성
         columns = ['ID', '날짜', '강사', '훈련과정', '출근 시간', '퇴근 시간', '일지 작성 완료']
         df = pd.DataFrame(attendance_records, columns=columns)
 
@@ -271,18 +322,13 @@ def get_attendance():
         if format_type == 'json':
             return jsonify({"success": True, "data": df.to_dict(orient='records')}), 200
 
-        # ✅ Excel 파일 다운로드
+        # ✅ Excel 다운로드
         elif format_type == 'excel':
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df.to_excel(writer, index=False, sheet_name="출퇴근 기록")
-            output.seek(0)
-            return send_file(
-                output,
-                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                as_attachment=True,
-                download_name="출퇴근_기록.xlsx"
-            )
+            return generate_excel_file(df, "출퇴근_기록.xlsx")
+
+        # ✅ CSV 다운로드
+        elif format_type == 'csv':
+            return generate_csv_file(df, "출퇴근_기록.csv")
 
         else:
             return jsonify({"success": False, "message": "잘못된 포맷 요청"}), 400
@@ -291,9 +337,12 @@ def get_attendance():
         logging.error("출퇴근 기록 조회 오류", exc_info=True)
         return jsonify({"success": False, "message": "출퇴근 기록 조회 실패"}), 500
 
+
 # 출퇴근 기록 저장
+# 최적화 완료
 @app.route('/attendance', methods=['POST'])
-def save_attendance():
+@with_db_connection
+def save_attendance(cursor):
     """
     출퇴근 기록 저장 API
     ---
@@ -350,40 +399,26 @@ def save_attendance():
       500:
         description: 출퇴근 기록 저장 실패
     """
-    try:
-        data = request.json
-        if not data:
-            return jsonify({"success": False, "message": "No data provided"}), 400
+    data = request.json
+    if not data:
+        return jsonify({"success": False, "message": "No data provided"}), 400
 
-        date = data.get('date')
-        instructor = data.get('instructor')
-        instructor_name = data.get('instructor_name')  # ✅ 강사명 추가
-        training_course = data.get('training_course')
-        check_in = data.get('check_in')
-        check_out = data.get('check_out')
-        daily_log = data.get('daily_log', False)
+    required_fields = ['date', 'instructor', 'training_course', 'check_in', 'check_out']
+    if any(field not in data for field in required_fields):
+        return jsonify({"success": False, "message": "필수 필드가 누락되었습니다."}), 400
 
-        if not date or not instructor or not instructor_name or not training_course or not check_in or not check_out:
-            return jsonify({"success": False, "message": "Missing required fields"}), 400
+    cursor.execute('''
+        INSERT INTO attendance (date, instructor, training_course, check_in, check_out)
+        VALUES (%s, %s, %s, %s, %s)
+    ''', (data['date'], data['instructor'], data['training_course'], data['check_in'], data['check_out']))
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO attendance (date, instructor, instructor_name, training_course, check_in, check_out, daily_log)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        ''', (date, instructor, instructor_name, training_course, check_in, check_out, daily_log))
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        return jsonify({"success": True, "message": "Attendance saved!"}), 201
-    except Exception as e:
-        logging.error("Error saving attendance", exc_info=True)
-        return jsonify({"success": False, "message": "Failed to save attendance"}), 500
+    return jsonify({"success": True, "message": "출퇴근 기록이 저장되었습니다."}), 201
 
 
+# 최적화 완료
 @app.route('/tasks', methods=['GET'])
-def get_tasks():
+@with_db_connection
+def get_tasks(cursor):
     """
     업무 체크리스트 조회 API
     ---
@@ -391,14 +426,25 @@ def get_tasks():
       - Tasks
     summary: 업무 체크리스트 데이터 조회
     description: 
-      모든 업무 체크리스트 데이터를 조회합니다.  
-      task_category를 기준으로 필터링할 수 있습니다.
+      - 모든 업무 체크리스트 데이터를 조회합니다.  
+      - `task_category`를 기준으로 필터링할 수 있습니다.
+      - `limit`과 `offset`을 사용하여 페이징 가능합니다.
     parameters:
       - name: task_category
         in: query
         type: string
         required: false
         description: "업무 체크리스트의 카테고리 (예: 개발, 디자인)"
+      - name: limit
+        in: query
+        type: integer
+        required: false
+        description: "가져올 데이터 개수 (기본값: 100)"
+      - name: offset
+        in: query
+        type: integer
+        required: false
+        description: "조회 시작 위치 (기본값: 0)"
     responses:
       200:
         description: 모든 업무 체크리스트 데이터를 반환함
@@ -443,11 +489,10 @@ def get_tasks():
     """
     try:
         task_category = request.args.get('task_category')  # 선택적 필터링
+        limit = int(request.args.get('limit', 100))  # 기본값 100
+        offset = int(request.args.get('offset', 0))  # 기본값 0
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # guide 컬럼 추가
+        # ✅ SQL 쿼리 구성
         query = "SELECT id, task_name, task_period, task_category, guide FROM task_items"
         params = []
 
@@ -455,39 +500,45 @@ def get_tasks():
             query += " WHERE task_category = %s"
             params.append(task_category)
 
-        query += " ORDER BY id ASC"
+        query += " ORDER BY id ASC LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
 
+        # ✅ SQL 실행
         cursor.execute(query, tuple(params))
+        tasks = cursor.fetchall()
 
-        tasks = [
+        # ✅ JSON 변환 (NULL 값 처리 포함)
+        result = [
             {
                 "id": row[0],
                 "task_name": row[1],
                 "task_period": row[2],
                 "task_category": row[3],
-                "guide": row[4] if row[4] else "업무 가이드 없음"  # NULL 값 기본 처리
+                "guide": row[4] if row[4] else "업무 가이드 없음"
             }
-            for row in cursor.fetchall()
+            for row in tasks
         ]
 
-        cursor.close()
-        conn.close()
+        return jsonify({"success": True, "data": result}), 200
 
-        return jsonify({"success": True, "data": tasks}), 200
     except Exception as e:
         logging.error("Error retrieving tasks", exc_info=True)
         return jsonify({"success": False, "message": "Failed to retrieve tasks"}), 500
 
 
-    
-
+# 최적화 완료
 @app.route('/tasks', methods=['POST'])
-def save_tasks():
+@with_db_connection
+def save_tasks(cursor):
     """
     업무 체크리스트 저장 API (체크 여부와 관계없이 모든 데이터 저장)
     ---
     tags:
       - Tasks
+    summary: 업무 체크리스트를 저장합니다.
+    description: |
+      - 주어진 `task_name` 목록을 확인하여, 존재하는 업무만 저장합니다.
+      - 모든 데이터를 새롭게 추가하며, 기존 데이터는 유지됩니다.
     parameters:
       - in: body
         name: body
@@ -526,45 +577,56 @@ def save_tasks():
         if not updates or not training_course:
             return jsonify({"success": False, "message": "No data provided"}), 400
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        # ✅ task_name 리스트 추출
+        task_names = [update["task_name"] for update in updates]
 
-        for update in updates:
-            task_name = update.get("task_name")
-            is_checked = update.get("is_checked", False)  # ✅ 체크 여부 기본값 False
+        # ✅ task_name → task_id 매핑 가져오기 (SQL 실행 횟수 줄이기)
+        cursor.execute(
+            "SELECT id, task_name FROM task_items WHERE task_name IN %s", 
+            (tuple(task_names),)
+        )
+        task_mapping = {row[1]: row[0] for row in cursor.fetchall()}
 
-            # task_id 찾기
-            cursor.execute("SELECT id FROM task_items WHERE task_name = %s", (task_name,))
-            task_item = cursor.fetchone()
-            if not task_item:
-                return jsonify({"success": False, "message": f"Task '{task_name}' does not exist"}), 400
+        # ✅ 존재하지 않는 task_name 체크
+        invalid_tasks = [name for name in task_names if name not in task_mapping]
+        if invalid_tasks:
+            return jsonify({"success": False, "message": f"Tasks not found: {', '.join(invalid_tasks)}"}), 400
 
-            task_id = task_item[0]
+        # ✅ 배치 INSERT 준비
+        insert_values = [
+            (task_mapping[update["task_name"]], training_course, update.get("is_checked", False))
+            for update in updates
+        ]
 
-            # ✅ 기존 데이터를 유지하면서 새로운 행을 INSERT (업데이트 없음)
-            cursor.execute("""
-                INSERT INTO task_checklist (task_id, training_course, is_checked, checked_date)
-                VALUES (%s, %s, %s, NOW());
-            """, (task_id, training_course, is_checked))
-
-        conn.commit()
-        cursor.close()
-        conn.close()
+        # ✅ SQL 실행 (배치 INSERT)
+        cursor.executemany(
+            """
+            INSERT INTO task_checklist (task_id, training_course, is_checked, checked_date)
+            VALUES (%s, %s, %s, NOW());
+            """, 
+            insert_values
+        )
 
         return jsonify({"success": True, "message": "Tasks saved successfully!"}), 201
+
     except Exception as e:
         logging.error("Error saving tasks", exc_info=True)
         return jsonify({"success": False, "message": "Failed to save tasks"}), 500
 
 
-
+# 최적화 완료
 @app.route('/remarks', methods=['POST'])
-def save_remarks():
+@with_db_connection
+def save_remarks(cursor):
     """
     전달사항 저장 API
     ---
     tags:
       - Remarks
+    summary: 전달사항을 저장합니다.
+    description: |
+      - 전달사항을 `notices` 테이블에 저장합니다.
+      - `type`은 "전달사항"으로 고정됩니다.
     parameters:
       - in: body
         name: body
@@ -596,31 +658,36 @@ def save_remarks():
     try:
         data = request.json
         remarks = data.get('remarks')
+
         if not remarks:
             return jsonify({"success": False, "message": "Remarks are required"}), 400
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        # ✅ 전달사항 저장
         cursor.execute('''
             INSERT INTO notices (type, title, content, date)
-            VALUES (%s, %s, %s, %s)
-        ''', ("전달사항", "전달사항 제목", remarks, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-        conn.commit()
-        cursor.close()
-        conn.close()
+            VALUES (%s, %s, %s, NOW())
+        ''', ("전달사항", "전달사항 제목", remarks))
 
         return jsonify({"success": True, "message": "Remarks saved!"}), 201
+
     except Exception as e:
         logging.error("Error saving remarks", exc_info=True)
         return jsonify({"success": False, "message": "Failed to save remarks"}), 500
 
+
+# 최적화 완료
 @app.route('/issues', methods=['POST'])
-def save_issue():
+@with_db_connection
+def save_issue(cursor):
     """
     이슈사항 저장 API
     ---
     tags:
       - Issues
+    summary: 이슈사항을 저장합니다.
+    description: |
+      - 발생한 이슈를 `issues` 테이블에 저장합니다.
+      - `resolved` 상태는 기본적으로 `FALSE`로 설정됩니다.
     parameters:
       - in: body
         name: body
@@ -631,6 +698,13 @@ def save_issue():
             issue:
               type: string
               example: "강의 자료 오류 발생"
+            training_course:
+              type: string
+              example: "데이터 분석 101"
+            date:
+              type: string
+              format: date
+              example: "2025-02-15"
     responses:
       201:
         description: 이슈사항 저장 성공
@@ -645,29 +719,27 @@ def save_issue():
         training_course = data.get('training_course')
         date = data.get('date')
 
-        if not issue_text or not training_course or not date:
+        # ✅ 필수 데이터 검증
+        if any(field is None or field.strip() == "" for field in [issue_text, training_course, date]):
             return jsonify({"success": False, "message": "이슈, 훈련 과정, 날짜를 모두 입력하세요."}), 400
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        # ✅ 이슈사항 저장
         cursor.execute('''
             INSERT INTO issues (content, date, training_course, created_at, resolved)
             VALUES (%s, %s, %s, NOW(), FALSE)
         ''', (issue_text, date, training_course))
 
-        conn.commit()
-        cursor.close()
-        conn.close()
-
         return jsonify({"success": True, "message": "이슈가 저장되었습니다."}), 201
+
     except Exception as e:
         logging.error("Error saving issue", exc_info=True)
         return jsonify({"success": False, "message": "이슈 저장 실패"}), 500
 
 
-
+# 최적화 완료
 @app.route('/issues', methods=['GET'])
-def get_issues():
+@with_db_connection
+def get_issues(cursor):
     """
     해결되지 않은 이슈 목록 조회 API
     ---
@@ -687,25 +759,39 @@ def get_issues():
               items:
                 type: object
                 properties:
-                  id:
-                    type: integer
-                  content:
-                    type: string
-                  date:
-                    type: string
                   training_course:
                     type: string
-                  created_at:
-                    type: string
-                  resolved:
-                    type: boolean
+                  issues:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        content:
+                          type: string
+                        date:
+                          type: string
+                        created_at:
+                          type: string
+                        resolved:
+                          type: boolean
+                        comments:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id:
+                                type: integer
+                              comment:
+                                type: string
+                              created_at:
+                                type: string
       500:
         description: 이슈 목록 조회 실패
     """
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
+        # ✅ 해결되지 않은 이슈 목록 + 해당 이슈의 댓글 포함
         cursor.execute('''
             SELECT training_course, json_agg(json_build_object(
                 'id', i.id, 
@@ -726,30 +812,37 @@ def get_issues():
             GROUP BY training_course
             ORDER BY MIN(i.created_at) DESC;
         ''')
+        
         issues_grouped = cursor.fetchall()
 
-        cursor.close()
-        conn.close()
+        # ✅ JSON 변환
+        result = [
+            {"training_course": row[0], "issues": row[1] if row[1] else []} 
+            for row in issues_grouped
+        ]
 
-        return jsonify({
-            "success": True,
-            "data": [
-                {"training_course": row[0], "issues": row[1]} for row in issues_grouped
-            ]
-        }), 200
+        return jsonify({"success": True, "data": result}), 200
+
     except Exception as e:
         logging.error("Error retrieving issues", exc_info=True)
         return jsonify({"success": False, "message": "이슈 목록을 불러오는 중 오류 발생"}), 500
 
 
+
 # 이슈에 대한 댓글 달기
+# 최적화 완료
 @app.route('/issues/comments', methods=['POST'])
-def add_issue_comment():
+@with_db_connection
+def add_issue_comment(cursor):
     """
     이슈사항에 대한 댓글 저장 API
     ---
     tags:
       - Issues
+    summary: 이슈에 대한 댓글을 저장합니다.
+    description: |
+      - 특정 `issue_id`에 대한 댓글을 저장합니다.
+      - `issue_id`가 존재하는지 먼저 확인한 후 댓글을 저장합니다.
     parameters:
       - in: body
         name: body
@@ -768,6 +861,8 @@ def add_issue_comment():
         description: 댓글 저장 성공
       400:
         description: 요청 데이터 오류
+      404:
+        description: 해당 이슈가 존재하지 않음
       500:
         description: 서버 오류
     """
@@ -776,27 +871,34 @@ def add_issue_comment():
         issue_id = data.get('issue_id')
         comment = data.get('comment')
 
-        if not issue_id or not comment:
+        # ✅ 필수 데이터 검증
+        if any(field is None or str(field).strip() == "" for field in [issue_id, comment]):
             return jsonify({"success": False, "message": "이슈 ID와 댓글 내용을 입력하세요."}), 400
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        # ✅ 해당 issue_id 존재 여부 확인
+        cursor.execute("SELECT id FROM issues WHERE id = %s", (issue_id,))
+        issue_exists = cursor.fetchone()
+        if not issue_exists:
+            return jsonify({"success": False, "message": f"이슈 ID {issue_id}가 존재하지 않습니다."}), 404
+
+        # ✅ 댓글 저장
         cursor.execute(
             "INSERT INTO issue_comments (issue_id, comment, created_at) VALUES (%s, %s, NOW())",
             (issue_id, comment)
         )
-        conn.commit()
-        cursor.close()
-        conn.close()
 
         return jsonify({"success": True, "message": "댓글이 저장되었습니다."}), 201
+
     except Exception as e:
         logging.error("Error saving issue comment", exc_info=True)
         return jsonify({"success": False, "message": "댓글 저장 실패"}), 500
 
-# 이슈에 대한 댓글 조회
+
+# 이슈 댓글 조회
+# 최적화 완료
 @app.route('/issues/comments', methods=['GET'])
-def get_issue_comments():
+@with_db_connection
+def get_issue_comments(cursor):
     """
     이슈사항의 댓글 조회 API
     ---
@@ -828,36 +930,50 @@ def get_issue_comments():
                     type: string
                   created_at:
                     type: string
+      400:
+        description: "이슈 ID가 제공되지 않음"
+      404:
+        description: "해당 이슈가 존재하지 않음"
       500:
-        description: 댓글 조회 실패
+        description: "댓글 조회 실패"
     """
     try:
         issue_id = request.args.get('issue_id')
 
-        if not issue_id:
-            return jsonify({"success": False, "message": "이슈 ID를 입력하세요."}), 400
+        # ✅ 필수 데이터 검증
+        if not issue_id or not issue_id.isdigit():
+            return jsonify({"success": False, "message": "유효한 이슈 ID를 입력하세요."}), 400
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        issue_id = int(issue_id)
+
+        # ✅ 해당 issue_id 존재 여부 확인
+        cursor.execute("SELECT id FROM issues WHERE id = %s", (issue_id,))
+        issue_exists = cursor.fetchone()
+        if not issue_exists:
+            return jsonify({"success": False, "message": f"이슈 ID {issue_id}가 존재하지 않습니다."}), 404
+
+        # ✅ 해당 이슈의 댓글 목록 조회
         cursor.execute(
             "SELECT id, comment, created_at FROM issue_comments WHERE issue_id = %s ORDER BY created_at ASC",
             (issue_id,)
         )
         comments = cursor.fetchall()
-        cursor.close()
-        conn.close()
 
         return jsonify({
             "success": True,
             "data": [{"id": row[0], "comment": row[1], "created_at": row[2]} for row in comments]
         }), 200
+
     except Exception as e:
         logging.error("Error retrieving issue comments", exc_info=True)
         return jsonify({"success": False, "message": "댓글 조회 실패"}), 500
 
+
 # 해결된 이슈 클릭
+# 최적화 완료
 @app.route('/issues/resolve', methods=['POST'])
-def resolve_issue():
+@with_db_connection
+def resolve_issue(cursor):
     """
     이슈 해결 API
     ---
@@ -879,6 +995,8 @@ def resolve_issue():
         description: 이슈 해결 성공
       400:
         description: 요청 데이터 오류
+      404:
+        description: 해당 이슈가 존재하지 않음
       500:
         description: 이슈 해결 실패
     """
@@ -886,32 +1004,40 @@ def resolve_issue():
         data = request.json
         issue_id = data.get('issue_id')
 
-        if not issue_id:
-            return jsonify({"success": False, "message": "이슈 ID가 필요합니다."}), 400
+        # ✅ 필수 데이터 검증
+        if not issue_id or not isinstance(issue_id, int):
+            return jsonify({"success": False, "message": "유효한 이슈 ID를 입력하세요."}), 400
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        # ✅ 해당 issue_id 존재 여부 확인
+        cursor.execute("SELECT id FROM issues WHERE id = %s", (issue_id,))
+        issue_exists = cursor.fetchone()
+        if not issue_exists:
+            return jsonify({"success": False, "message": f"이슈 ID {issue_id}가 존재하지 않습니다."}), 404
+
+        # ✅ 이슈 해결 처리
         cursor.execute(
             "UPDATE issues SET resolved = TRUE WHERE id = %s",
             (issue_id,)
         )
-        conn.commit()
-        cursor.close()
-        conn.close()
 
         return jsonify({"success": True, "message": "이슈가 해결되었습니다."}), 200
+
     except Exception as e:
         logging.error("Error resolving issue", exc_info=True)
         return jsonify({"success": False, "message": "이슈 해결 실패"}), 500
 
+
 # 이슈사항 전체 다운로드
+# 최적화 완료
 @app.route('/issues/download', methods=['GET'])
-def download_issues():
+@with_db_connection
+def download_issues(cursor):
     """
     이슈사항을 Excel 파일로 다운로드하는 API
     ---
     tags:
       - Issues
+    summary: "등록된 모든 이슈사항을 Excel 파일로 다운로드합니다."
     responses:
       200:
         description: 이슈사항을 Excel 파일로 다운로드
@@ -919,37 +1045,26 @@ def download_issues():
         description: 이슈사항 다운로드 실패
     """
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
+        # ✅ 모든 이슈 조회
         cursor.execute("SELECT id, content, date, training_course, created_at, resolved FROM issues")
         issues = cursor.fetchall()
-        cursor.close()
-        conn.close()
 
-        # DataFrame 생성
+        # ✅ DataFrame 생성
         columns = ["ID", "이슈 내용", "날짜", "훈련 과정", "생성일", "해결됨"]
         df = pd.DataFrame(issues, columns=columns)
 
-        # Excel 파일 생성
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name="이슈사항")
-        output.seek(0)
+        # ✅ Excel 파일 생성 및 반환
+        return generate_excel_file(df, "이슈사항.xlsx")
 
-        return send_file(
-            output,
-            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            as_attachment=True,
-            download_name="이슈사항.xlsx"
-        )
     except Exception as e:
         logging.error("이슈사항 다운로드 실패", exc_info=True)
         return jsonify({"success": False, "message": "이슈 다운로드 실패"}), 500
 
 
+# 최적화 완료
 @app.route('/irregular_tasks', methods=['GET'])
-def get_irregular_tasks():
+@with_db_connection
+def get_irregular_tasks(cursor):
     """
     비정기 업무 체크리스트 조회 API (가장 최근 상태만 반환)
     ---
@@ -981,30 +1096,31 @@ def get_irregular_tasks():
         description: 비정기 업무 조회 실패
     """
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
+        # ✅ 비정기 업무 체크리스트의 최신 상태 조회
         cursor.execute('''
             SELECT DISTINCT ON (task_name) id, task_name, is_checked, checked_date
             FROM irregular_tasks
             ORDER BY task_name, checked_date DESC
         ''')
         tasks = cursor.fetchall()
-        cursor.close()
-        conn.close()
 
-        return jsonify({
-            "success": True,
-            "data": [{"id": t[0], "task_name": t[1], "is_checked": t[2], "checked_date": t[3]} for t in tasks]
-        }), 200
+        # ✅ JSON 변환
+        result = [
+            {"id": t[0], "task_name": t[1], "is_checked": t[2], "checked_date": t[3]}
+            for t in tasks
+        ]
+
+        return jsonify({"success": True, "data": result}), 200
+
     except Exception as e:
         logging.error("비정기 업무 조회 오류", exc_info=True)
         return jsonify({"success": False, "message": "비정기 업무 조회 실패"}), 500
 
 
-
+# 최적화 완료
 @app.route('/irregular_tasks', methods=['POST'])
-def save_irregular_tasks():
+@with_db_connection
+def save_irregular_tasks(cursor):
     """
     비정기 업무 체크리스트 추가 저장 API
     기존 데이터를 덮어씌우지 않고 새로운 체크 상태를 추가
@@ -1029,9 +1145,13 @@ def save_irregular_tasks():
                     type: string
                   is_checked:
                     type: boolean
+            training_course:
+              type: string
     responses:
       201:
         description: 비정기 업무 체크리스트 저장 성공
+      400:
+        description: 요청 데이터 오류
       500:
         description: 비정기 업무 체크리스트 저장 실패
     """
@@ -1039,26 +1159,28 @@ def save_irregular_tasks():
         data = request.json
         updates = data.get("updates")
         training_course = data.get("training_course")
-        
+
+        # ✅ 필수 데이터 검증
         if not updates or not training_course:
-            return jsonify({"success": False, "message": "No data provided"}), 400
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        for update in updates:
-            task_name = update.get("task_name")
-            is_checked = update.get("is_checked")
-            cursor.execute('''
-                INSERT INTO irregular_tasks (task_name, is_checked, checked_date, training_course)
-                VALUES (%s, %s, NOW(), %s)
-            ''', (task_name, is_checked, training_course))
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
+            return jsonify({"success": False, "message": "업데이트할 데이터와 훈련 과정이 필요합니다."}), 400
+
+        # ✅ 데이터 변환 (배치 INSERT 용)
+        insert_values = [
+            (update.get("task_name"), update.get("is_checked", False), training_course)
+            for update in updates
+        ]
+
+        # ✅ 배치 INSERT 실행
+        cursor.executemany(
+            '''
+            INSERT INTO irregular_tasks (task_name, is_checked, checked_date, training_course)
+            VALUES (%s, %s, NOW(), %s)
+            ''',
+            insert_values
+        )
+
         return jsonify({"success": True, "message": "비정기 업무 체크리스트가 저장되었습니다!"}), 201
+
     except Exception as e:
         logging.error("비정기 업무 체크리스트 저장 오류", exc_info=True)
         return jsonify({"success": False, "message": "비정기 업무 체크리스트 저장 실패"}), 500
@@ -1583,11 +1705,48 @@ def get_task_status():
 @app.route('/admin/task_status_overall', methods=['GET'])
 def get_overall_task_status():
     """
-    훈련 과정별 전체 체크율을 조회하는 API
+    훈련 과정별 전체 업무 체크리스트의 체크율을 조회하는 API
     ---
+    tags:
+      - Admin
+    summary: "훈련 과정별 전체 체크율 조회"
+    description: |
+      특정 날짜 범위가 아닌 **전체 기간** 동안 수행된 업무 체크리스트의 체크율을 계산하여 반환합니다.
+      모든 훈련 과정의 전체 체크 상태를 포함하며, 각 훈련 과정의 부서 정보도 함께 제공합니다.
     responses:
       200:
         description: 훈련 과정별 전체 체크율 데이터 반환
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  training_course:
+                    type: string
+                    example: "데이터 분석 스쿨"
+                  dept:
+                    type: string
+                    example: "TechSol"
+                  check_rate:
+                    type: string
+                    example: "85.5%"
+      500:
+        description: 전체 체크율 조회 실패
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: false
+            message:
+              type: string
+              example: "Failed to retrieve overall task status"
     """
     try:
         conn = get_db_connection()
@@ -1601,7 +1760,7 @@ def get_overall_task_status():
             JOIN training_info ti ON tc.training_course = ti.training_course
             GROUP BY tc.training_course, ti.dept
         ''')
-        
+
         results = cursor.fetchall()
         cursor.close()
         conn.close()
