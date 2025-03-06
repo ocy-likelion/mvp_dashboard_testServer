@@ -198,6 +198,66 @@ def get_notices():
         logging.error("Error retrieving notices", exc_info=True)
         return jsonify({"success": False, "message": "Failed to retrieve notices"}), 500
 
+
+@app.route('/notices', methods=['POST'])
+def add_notice():
+    """
+    공지사항 추가 API
+    ---
+    tags:
+      - Notices
+    summary: 새로운 공지사항을 추가합니다.
+    description: 
+      사용자가 새로운 공지사항을 등록할 수 있습니다.
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - title
+            - content
+          properties:
+            title:
+              type: string
+              example: "시스템 점검 안내"
+            content:
+              type: string
+              example: "금일 오후 6시부터 8시까지 시스템 점검이 진행됩니다."
+    responses:
+      201:
+        description: 공지사항 추가 성공
+      400:
+        description: 필수 데이터 누락
+      500:
+        description: 서버 오류 발생
+    """
+    try:
+        data = request.json
+        title = data.get("title")
+        content = data.get("content")
+
+        if not title or not content:
+            return jsonify({"success": False, "message": "제목과 내용을 입력하세요."}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO notices (title, content, date)
+            VALUES (%s, %s, %s)
+        ''', (title, content, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({"success": True, "message": "공지사항이 추가되었습니다."}), 201
+    except Exception as e:
+        logging.error("공지사항 추가 오류", exc_info=True)
+        return jsonify({"success": False, "message": "공지사항 추가 실패"}), 500
+
+
 # 과정명 선택할 수 있는 드롭다운 설정
 @app.route('/training_courses', methods=['GET'])
 def get_training_courses():
@@ -290,6 +350,7 @@ def get_attendance():
     except Exception as e:
         logging.error("출퇴근 기록 조회 오류", exc_info=True)
         return jsonify({"success": False, "message": "출퇴근 기록 조회 실패"}), 500
+
 
 # 출퇴근 기록 저장
 @app.route('/attendance', methods=['POST'])
@@ -1622,6 +1683,87 @@ def get_overall_task_status():
         logging.error("Error retrieving overall task status", exc_info=True)
         return jsonify({"success": False, "message": "Failed to retrieve overall task status"}), 500
 
+
+@app.route('/admin/task_status_combined', methods=['GET'])
+def get_combined_task_status():
+    """
+    훈련 과정별 업무 체크리스트의 체크율(당일 및 전체)을 조회하는 API
+    ---
+    tags:
+      - Admin
+    summary: "훈련 과정별 업무 체크율 조회"
+    description: "각 훈련 과정별로 당일 체크율과 전체 체크율을 조회합니다."
+    responses:
+      200:
+        description: 훈련 과정별 체크율 데이터 반환
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  training_course:
+                    type: string
+                  dept:
+                    type: string
+                  daily_check_rate:
+                    type: string
+                  overall_check_rate:
+                    type: string
+      500:
+        description: 체크 상태 조회 실패
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # ✅ 당일 체크율과 전체 체크율을 함께 계산
+        cursor.execute('''
+            SELECT 
+                tc.training_course, 
+                ti.dept, 
+                COUNT(*) AS total_tasks,
+                SUM(CASE WHEN tc.is_checked THEN 1 ELSE 0 END) AS checked_tasks,
+                SUM(CASE WHEN tc.is_checked AND DATE(tc.checked_date) = CURRENT_DATE THEN 1 ELSE 0 END) AS daily_checked_tasks,
+                COUNT(CASE WHEN DATE(tc.checked_date) = CURRENT_DATE THEN 1 ELSE NULL END) AS daily_total_tasks
+            FROM task_checklist tc
+            JOIN training_info ti ON tc.training_course = ti.training_course
+            GROUP BY tc.training_course, ti.dept
+        ''')
+
+        results = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        task_status = []
+        for row in results:
+            training_course = row[0]
+            dept = row[1]
+            total_tasks = row[2]
+            checked_tasks = row[3] if row[3] else 0
+            daily_checked_tasks = row[4] if row[4] else 0
+            daily_total_tasks = row[5] if row[5] else 0
+
+            # ✅ 전체 체크율 계산
+            overall_check_rate = round((checked_tasks / total_tasks) * 100, 2) if total_tasks > 0 else 0
+            # ✅ 당일 체크율 계산
+            daily_check_rate = round((daily_checked_tasks / daily_total_tasks) * 100, 2) if daily_total_tasks > 0 else 0
+
+            task_status.append({
+                "training_course": training_course,
+                "dept": dept,
+                "daily_check_rate": f"{daily_check_rate}%",  # 당일 체크율
+                "overall_check_rate": f"{overall_check_rate}%"  # 전체 체크율
+            })
+
+        return jsonify({"success": True, "data": task_status}), 200
+    except Exception as e:
+        logging.error("Error retrieving combined task status", exc_info=True)
+        return jsonify({"success": False, "message": "Failed to retrieve task status"}), 500
 
 
 # ------------------- API 엔드포인트 문서화 끝 -------------------
