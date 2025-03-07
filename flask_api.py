@@ -1248,11 +1248,11 @@ def get_training_info():
 
 
 
-# ✅ 미체크 항목의 설명 불러오기
+# ✅ 미체크 항목의 설명 불러오기 (부서명 포함)
 @app.route('/unchecked_descriptions', methods=['GET'])
 def get_unchecked_descriptions():
     """
-    미체크 항목 설명 및 액션 플랜 조회 API
+    미체크 항목 설명 및 액션 플랜 조회 API (부서명 포함)
 
     ---
     tags:
@@ -1260,7 +1260,7 @@ def get_unchecked_descriptions():
     summary: 미체크 항목 설명 및 액션 플랜 조회
     description:
       데이터베이스에서 해결되지 않은 미체크 항목 목록을 조회하여 반환합니다.
-      반환된 데이터에는 각 항목의 설명과 함께 입력된 액션 플랜이 포함됩니다.
+      반환된 데이터에는 각 항목의 설명, 액션 플랜 및 과정명에 해당하는 부서명이 포함됩니다.
     responses:
       200:
         description: 미체크 항목 목록 조회 성공
@@ -1287,6 +1287,9 @@ def get_unchecked_descriptions():
                   training_course:
                     type: string
                     example: "데이터 분석 스쿨 100기"
+                  dept:
+                    type: string
+                    example: "TechSol"
                   created_at:
                     type: string
                     example: "2025-02-12 10:30:00"
@@ -1300,11 +1303,13 @@ def get_unchecked_descriptions():
         conn = get_db_connection()
         cursor = conn.cursor()
 
+        # ✅ training_info 테이블을 조인하여 dept 정보 포함
         cursor.execute('''
-            SELECT id, content, action_plan, training_course, created_at, resolved
-            FROM unchecked_descriptions
-            WHERE resolved = FALSE  
-            ORDER BY created_at DESC;
+            SELECT ud.id, ud.content, ud.action_plan, ud.training_course, ti.dept, ud.created_at, ud.resolved
+            FROM unchecked_descriptions ud
+            JOIN training_info ti ON ud.training_course = ti.training_course
+            WHERE ud.resolved = FALSE  
+            ORDER BY ud.created_at DESC;
         ''')
         unchecked_items = cursor.fetchall()
 
@@ -1319,14 +1324,16 @@ def get_unchecked_descriptions():
                     "content": row[1],  # 항목 설명
                     "action_plan": row[2],  # 액션 플랜
                     "training_course": row[3],
-                    "created_at": row[4],
-                    "resolved": row[5]
+                    "dept": row[4],  # ✅ 부서명 추가
+                    "created_at": row[5],
+                    "resolved": row[6]
                 } for row in unchecked_items
             ]
         }), 200
     except Exception as e:
         logging.error("Error retrieving unchecked descriptions", exc_info=True)
         return jsonify({"success": False, "message": "미체크 항목 목록을 불러오는 중 오류 발생"}), 500
+
 
 
 # ✅ 미체크 항목 저장
