@@ -97,6 +97,13 @@ def login():
               type: boolean
             message:
               type: string
+            user:
+              type: object
+              properties:
+                id:
+                  type: integer
+                username:
+                  type: string
       401:
         description: 인증 실패 (잘못된 자격 증명)
     """
@@ -121,11 +128,17 @@ def login():
         # ✅ 로그인 성공 시 세션에 사용자 정보 저장
         session['user'] = {"id": user[0], "username": username}
 
-        return jsonify({"success": True, "message": "로그인 성공!"}), 200
+        # ✅ 응답에 username 포함
+        return jsonify({
+            "success": True,
+            "message": "로그인 성공!",
+            "user": session['user']  # ✅ username을 포함한 객체 반환
+        }), 200
 
     except Exception as e:
         logging.error("로그인 오류", exc_info=True)
         return jsonify({"success": False, "message": "서버 오류 발생"}), 500
+
 
 
 # ✅ 로그아웃 API
