@@ -65,13 +65,12 @@ def healthcheck():
 @app.route('/login', methods=['POST'])
 def login():
     """
-    사용자 로그인 API
-
+    사용자 로그인 API (세션 기반)
     ---
     tags:
       - Authentication
-    summary: 사용자 로그인
-    description: 사용자가 ID와 비밀번호를 입력하여 로그인합니다.
+    summary: 사용자 로그인 (세션 방식)
+    description: 사용자가 ID와 비밀번호를 입력하여 로그인합니다. 서버에서 세션을 생성하여 유지합니다.
     parameters:
       - in: body
         name: body
@@ -98,22 +97,8 @@ def login():
               type: boolean
             message:
               type: string
-              example: "로그인 성공!"
-            user:
-              type: object
-              properties:
-                id:
-                  type: integer
-                  example: 123
-                username:
-                  type: string
-                  example: "john_doe"
-      400:
-        description: 입력값 오류 (ID 또는 비밀번호 누락)
       401:
-        description: 인증 실패 (잘못된 ID 또는 비밀번호)
-      500:
-        description: 서버 오류 발생
+        description: 인증 실패 (잘못된 자격 증명)
     """
     data = request.json
     username = data.get('username')
@@ -133,13 +118,10 @@ def login():
         if not user or user[1] != password:
             return jsonify({"success": False, "message": "잘못된 ID 또는 비밀번호입니다."}), 401
 
+        # ✅ 로그인 성공 시 세션에 사용자 정보 저장
         session['user'] = {"id": user[0], "username": username}
 
-        return jsonify({
-            "success": True, 
-            "message": "로그인 성공!", 
-            "user": session['user']
-        }), 200
+        return jsonify({"success": True, "message": "로그인 성공!"}), 200
 
     except Exception as e:
         logging.error("로그인 오류", exc_info=True)
@@ -149,7 +131,18 @@ def login():
 # ✅ 로그아웃 API
 @app.route('/logout', methods=['POST'])
 def logout():
-    session.pop('user', None)
+    """
+    로그아웃 API (세션 기반)
+    ---
+    tags:
+      - Authentication
+    summary: 사용자 로그아웃
+    description: 서버에서 세션을 제거하여 로그아웃합니다.
+    responses:
+      200:
+        description: 로그아웃 성공
+    """
+    session.pop('user', None)  # ✅ 세션 삭제
     return jsonify({"success": True, "message": "로그아웃 완료!"}), 200
 
 
@@ -157,16 +150,15 @@ def logout():
 @app.route('/me', methods=['GET'])
 def get_current_user():
     """
-    로그인 상태 확인 API
-
+    현재 로그인한 사용자 정보 조회 API (세션 기반)
     ---
     tags:
       - Authentication
-    summary: 현재 로그인한 사용자 정보 조회
-    description: 현재 로그인한 사용자의 정보를 반환합니다.
+    summary: 로그인된 사용자 정보 조회
+    description: 세션을 통해 현재 로그인한 사용자의 정보를 반환합니다.
     responses:
       200:
-        description: 로그인한 사용자 정보 반환
+        description: 로그인된 사용자 정보 반환
         schema:
           type: object
           properties:
@@ -177,19 +169,15 @@ def get_current_user():
               properties:
                 id:
                   type: integer
-                  example: 123
                 username:
                   type: string
-                  example: "john_doe"
       401:
-        description: 로그인되지 않은 상태
+        description: 인증되지 않은 사용자
     """
     if 'user' not in session:
         return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
-    return jsonify({
-        "success": True,
-        "user": session['user']  
-    }), 200
+    
+    return jsonify({"success": True, "user": session['user']}), 200
 
 
 # front_for_pro 페이지
