@@ -540,22 +540,27 @@ def get_tasks():
         return jsonify({"success": False, "message": "Failed to retrieve tasks"}), 500
 
 
-    
 
 @app.route('/tasks', methods=['POST'])
 def save_tasks():
     """
-    업무 체크리스트 저장 API (체크 여부와 관계없이 모든 데이터 저장)
+    업무 체크리스트 저장 API (사용자 ID 포함)
     ---
     tags:
       - Tasks
+    summary: 업무 체크리스트 저장
+    description: 
+      사용자가 체크한 업무 체크리스트 데이터를 저장합니다.  
+      로그인한 사용자의 ID(= 입력한 username)를 자동으로 저장합니다.
     parameters:
       - in: body
         name: body
-        description: 저장할 체크리스트 업데이트 데이터
         required: true
         schema:
           type: object
+          required:
+            - updates
+            - training_course
           properties:
             updates:
               type: array
@@ -567,55 +572,61 @@ def save_tasks():
                 properties:
                   task_name:
                     type: string
+                    example: "강의 준비 완료"
                   is_checked:
                     type: boolean
+                    example: true
             training_course:
               type: string
+              example: "데이터 분석 스쿨"
     responses:
       201:
         description: 업무 체크리스트 저장 성공
       400:
         description: 요청 데이터 없음
+      401:
+        description: 로그인이 필요함
       500:
-        description: 업무 체크리스트 저장 실패
+        description: 서버 오류 발생
     """
-    try:
-        data = request.json
-        updates = data.get("updates")
-        training_course = data.get("training_course")
+    if 'user' not in session:
+        return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
 
-        if not updates or not training_course:
-            return jsonify({"success": False, "message": "No data provided"}), 400
+    user_id = session['user']['username']  # ✅ 로그인한 사용자의 ID (username)
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
+    data = request.json
+    updates = data.get("updates")
+    training_course = data.get("training_course")
 
-        for update in updates:
-            task_name = update.get("task_name")
-            is_checked = update.get("is_checked", False)  # ✅ 체크 여부 기본값 False
+    if not updates or not training_course:
+        return jsonify({"success": False, "message": "No data provided"}), 400
 
-            # task_id 찾기
-            cursor.execute("SELECT id FROM task_items WHERE task_name = %s", (task_name,))
-            task_item = cursor.fetchone()
-            if not task_item:
-                return jsonify({"success": False, "message": f"Task '{task_name}' does not exist"}), 400
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
-            task_id = task_item[0]
+    for update in updates:
+        task_name = update.get("task_name")
+        is_checked = update.get("is_checked", False)
 
-            # ✅ 기존 데이터를 유지하면서 새로운 행을 INSERT (업데이트 없음)
-            cursor.execute("""
-                INSERT INTO task_checklist (task_id, training_course, is_checked, checked_date)
-                VALUES (%s, %s, %s, NOW());
-            """, (task_id, training_course, is_checked))
+        # task_id 찾기
+        cursor.execute("SELECT id FROM task_items WHERE task_name = %s", (task_name,))
+        task_item = cursor.fetchone()
+        if not task_item:
+            return jsonify({"success": False, "message": f"Task '{task_name}' does not exist"}), 400
 
-        conn.commit()
-        cursor.close()
-        conn.close()
+        task_id = task_item[0]
 
-        return jsonify({"success": True, "message": "Tasks saved successfully!"}), 201
-    except Exception as e:
-        logging.error("Error saving tasks", exc_info=True)
-        return jsonify({"success": False, "message": "Failed to save tasks"}), 500
+        # ✅ 작성자(user_id) 대신 username 저장
+        cursor.execute("""
+            INSERT INTO task_checklist (task_id, training_course, is_checked, checked_date, username)
+            VALUES (%s, %s, %s, NOW(), %s);
+        """, (task_id, training_course, is_checked, user_id))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return jsonify({"success": True, "message": "Tasks saved successfully!"}), 201
 
 
 
