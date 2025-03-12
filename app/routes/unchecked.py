@@ -19,7 +19,8 @@ def get_unchecked_descriptions():
         cursor = conn.cursor()
 
         cursor.execute('''
-            SELECT ud.id, ud.content, ud.action_plan, ud.training_course, ti.dept, ud.created_at, ud.resolved
+            SELECT ud.id, ud.content, ud.action_plan, ud.training_course, 
+                   ti.dept, ud.created_at, ud.resolved, ud.id_task
             FROM unchecked_descriptions ud
             JOIN training_info ti ON ud.training_course = ti.training_course
             WHERE ud.resolved = FALSE  
@@ -40,7 +41,8 @@ def get_unchecked_descriptions():
                     "training_course": row[3],
                     "dept": row[4],
                     "created_at": row[5],
-                    "resolved": row[6]
+                    "resolved": row[6],
+                    "task_checklist_id": row[7]
                 } for row in unchecked_items
             ]
         }), 200
@@ -65,17 +67,19 @@ def save_unchecked_description():
         description = data.get("description", "").strip()
         action_plan = data.get("action_plan", "").strip()
         training_course = data.get("training_course", "").strip()
+        task_checklist_id = data.get("task_checklist_id")
 
-        if not description or not action_plan or not training_course:
-            return jsonify({"success": False, "message": "설명, 액션 플랜, 훈련과정명을 모두 입력하세요."}), 400
+        if not description or not action_plan or not training_course or not task_checklist_id:
+            return jsonify({"success": False, "message": "필수 항목이 누락되었습니다."}), 400
 
         conn = get_db_connection()
         cursor = conn.cursor()
 
         cursor.execute('''
-            INSERT INTO unchecked_descriptions (content, action_plan, training_course, created_at, resolved)
-            VALUES (%s, %s, %s, NOW(), FALSE)
-        ''', (description, action_plan, training_course))
+            INSERT INTO unchecked_descriptions 
+            (content, action_plan, training_course, created_at, resolved, id_task)
+            VALUES (%s, %s, %s, NOW(), FALSE, %s)
+        ''', (description, action_plan, training_course, task_checklist_id))
 
         conn.commit()
         cursor.close()
@@ -142,9 +146,9 @@ def resolve_unchecked_description():
             # 트랜잭션 시작
             cursor.execute("BEGIN")
 
-            # 1. 미체크 항목 정보 조회
+            # 1. 미체크 항목 정보와 연결된 task_checklist id 조회
             cursor.execute("""
-                SELECT content, training_course, created_at
+                SELECT id_task
                 FROM unchecked_descriptions 
                 WHERE id = %s
             """, (unchecked_id,))
@@ -154,18 +158,14 @@ def resolve_unchecked_description():
                 cursor.execute("ROLLBACK")
                 return jsonify({"success": False, "message": "해당 미체크 항목을 찾을 수 없습니다."}), 404
 
-            content, training_course, created_date = unchecked_item
+            task_checklist_id = unchecked_item[0]
 
-            # 2. task_checklist에서 해당 날짜의 미체크 항목 찾기
+            # 2. task_checklist 업데이트
             cursor.execute("""
-                UPDATE task_checklist tc
+                UPDATE task_checklist
                 SET is_checked = TRUE
-                FROM task_items ti
-                WHERE tc.task_id = ti.id
-                AND ti.task_name = %s
-                AND tc.training_course = %s
-                AND DATE(tc.checked_date) = DATE(%s)
-            """, (content, training_course, created_date))
+                WHERE id = %s
+            """, (task_checklist_id,))
 
             # 3. 미체크 항목을 해결 상태로 변경
             cursor.execute("""
