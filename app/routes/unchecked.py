@@ -138,65 +138,73 @@ def resolve_unchecked_description():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # 1. 미체크 항목 정보 조회
-        cursor.execute("""
-            SELECT content, training_course, created_at 
-            FROM unchecked_descriptions 
-            WHERE id = %s
-        """, (unchecked_id,))
-        unchecked_item = cursor.fetchone()
-        
-        if not unchecked_item:
-            cursor.close()
-            conn.close()
-            return jsonify({"success": False, "message": "해당 미체크 항목을 찾을 수 없습니다."}), 404
+        try:
+            # 트랜잭션 시작
+            cursor.execute("BEGIN")
 
-        content, training_course, created_date = unchecked_item
+            # 1. 미체크 항목 정보 조회
+            cursor.execute("""
+                SELECT ud.content, ud.training_course, ud.created_at, ti.task_id
+                FROM unchecked_descriptions ud
+                JOIN task_items ti ON ud.content = ti.task_name
+                WHERE ud.id = %s
+            """, (unchecked_id,))
+            
+            unchecked_item = cursor.fetchone()
+            if not unchecked_item:
+                cursor.execute("ROLLBACK")
+                return jsonify({"success": False, "message": "해당 미체크 항목을 찾을 수 없습니다."}), 404
 
-        # 2. task_items에서 해당 task_id 찾기
-        cursor.execute("""
-            SELECT id FROM task_items 
-            WHERE task_name = %s
-        """, (content,))
-        task_item = cursor.fetchone()
-        
-        if task_item:
-            task_id = task_item[0]
-            # 3. task_checklist 업데이트 또는 새로운 체크 기록 추가
+            content, training_course, created_date, task_id = unchecked_item
+
+            # 2. task_checklist 업데이트
             cursor.execute("""
                 UPDATE task_checklist 
                 SET is_checked = TRUE 
                 WHERE task_id = %s 
                 AND training_course = %s 
                 AND DATE(checked_date) = DATE(%s)
+                RETURNING id
             """, (task_id, training_course, created_date))
 
-            if cursor.rowcount == 0:  # 해당 날짜의 체크 기록이 없는 경우
+            updated = cursor.fetchone()
+
+            # 3. 만약 해당 날짜의 체크 기록이 없다면 새로 생성
+            if not updated:
                 cursor.execute("""
                     INSERT INTO task_checklist 
                     (task_id, training_course, is_checked, checked_date, username)
                     VALUES (%s, %s, TRUE, %s, 'admin_resolved')
                 """, (task_id, training_course, created_date))
 
-        # 4. 미체크 항목을 해결 상태로 변경
-        cursor.execute("""
-            UPDATE unchecked_descriptions 
-            SET resolved = TRUE 
-            WHERE id = %s
-        """, (unchecked_id,))
+            # 4. 미체크 항목을 해결 상태로 변경
+            cursor.execute("""
+                UPDATE unchecked_descriptions 
+                SET resolved = TRUE,
+                    resolved_at = NOW()
+                WHERE id = %s
+            """, (unchecked_id,))
 
-        conn.commit()
-        cursor.close()
-        conn.close()
+            # 트랜잭션 커밋
+            cursor.execute("COMMIT")
 
-        return jsonify({
-            "success": True, 
-            "message": "미체크 항목이 해결되었으며, 체크 상태가 업데이트되었습니다."
-        }), 200
+            return jsonify({
+                "success": True, 
+                "message": "미체크 항목이 해결되었으며, 체크 상태가 업데이트되었습니다."
+            }), 200
+
+        except Exception as e:
+            # 오류 발생 시 롤백
+            cursor.execute("ROLLBACK")
+            raise e
 
     except Exception as e:
         logging.error("Error resolving unchecked description", exc_info=True)
         return jsonify({"success": False, "message": "미체크 항목 해결 실패"}), 500
+
+    finally:
+        cursor.close()
+        conn.close()
 
 @bp.route('/unchecked_comments', methods=['GET'])
 def get_unchecked_comments():
