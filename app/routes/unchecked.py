@@ -144,10 +144,9 @@ def resolve_unchecked_description():
 
             # 1. 미체크 항목 정보 조회
             cursor.execute("""
-                SELECT ud.content, ud.training_course, ud.created_at, ti.task_id
-                FROM unchecked_descriptions ud
-                JOIN task_items ti ON ud.content = ti.task_name
-                WHERE ud.id = %s
+                SELECT content, training_course, created_at
+                FROM unchecked_descriptions 
+                WHERE id = %s
             """, (unchecked_id,))
             
             unchecked_item = cursor.fetchone()
@@ -155,29 +154,20 @@ def resolve_unchecked_description():
                 cursor.execute("ROLLBACK")
                 return jsonify({"success": False, "message": "해당 미체크 항목을 찾을 수 없습니다."}), 404
 
-            content, training_course, created_date, task_id = unchecked_item
+            content, training_course, created_date = unchecked_item
 
-            # 2. task_checklist 업데이트
+            # 2. task_checklist에서 해당 날짜의 미체크 항목 찾기
             cursor.execute("""
-                UPDATE task_checklist 
-                SET is_checked = TRUE 
-                WHERE task_id = %s 
-                AND training_course = %s 
-                AND DATE(checked_date) = DATE(%s)
-                RETURNING id
-            """, (task_id, training_course, created_date))
+                UPDATE task_checklist tc
+                SET is_checked = TRUE
+                FROM task_items ti
+                WHERE tc.task_id = ti.id
+                AND ti.task_name = %s
+                AND tc.training_course = %s
+                AND DATE(tc.checked_date) = DATE(%s)
+            """, (content, training_course, created_date))
 
-            updated = cursor.fetchone()
-
-            # 3. 만약 해당 날짜의 체크 기록이 없다면 새로 생성
-            if not updated:
-                cursor.execute("""
-                    INSERT INTO task_checklist 
-                    (task_id, training_course, is_checked, checked_date, username)
-                    VALUES (%s, %s, TRUE, %s, 'admin_resolved')
-                """, (task_id, training_course, created_date))
-
-            # 4. 미체크 항목을 해결 상태로 변경
+            # 3. 미체크 항목을 해결 상태로 변경
             cursor.execute("""
                 UPDATE unchecked_descriptions 
                 SET resolved = TRUE,
