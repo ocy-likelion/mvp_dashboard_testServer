@@ -64,6 +64,52 @@ def healthcheck():
 # ✅ 로그인 API
 @app.route('/login', methods=['POST'])
 def login():
+    """
+    로그인 API
+    ---
+    tags:
+      - Authentication
+    summary: 사용자 로그인
+    description: 
+      사용자가 로그인하면 세션을 설정하고, 로그인된 사용자 정보를 반환합니다.
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - username
+            - password
+          properties:
+            username:
+              type: string
+              example: "user123"
+            password:
+              type: string
+              example: "password123"
+    responses:
+      200:
+        description: 로그인 성공
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "로그인 성공!"
+            username:
+              type: string
+              example: "user123"
+      400:
+        description: ID 또는 비밀번호 누락
+      401:
+        description: 로그인 실패 (잘못된 ID 또는 비밀번호)
+      500:
+        description: 서버 오류 발생
+    """
     data = request.json
     username = data.get('username')
     password = data.get('password')
@@ -82,12 +128,14 @@ def login():
         if not user or user[1] != password:
             return jsonify({"success": False, "message": "잘못된 ID 또는 비밀번호입니다."}), 401
 
-        session['user'] = {"id": user[0], "username": username}
-        return jsonify({"success": True, "message": "로그인 성공!"}), 200
+        session['user'] = {"id": user[0], "username": username}  # ✅ 세션에 저장
+
+        return jsonify({"success": True, "message": "로그인 성공!", "username": username}), 200  # ✅ username 반환
 
     except Exception as e:
         logging.error("로그인 오류", exc_info=True)
         return jsonify({"success": False, "message": "서버 오류 발생"}), 500
+
 
 
 # ✅ 로그아웃 API
