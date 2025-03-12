@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from app.database import get_db_connection
 import logging
+from datetime import datetime
 
 bp = Blueprint('unchecked', __name__)
 
@@ -125,7 +126,7 @@ def resolve_unchecked_description():
     ---
     tags:
       - Unchecked Descriptions
-    summary: 특정 미체크 항목을 해결 상태로 변경합니다.
+    summary: 특정 미체크 항목을 해결 상태로 변경하고 관련 task를 체크 상태로 업데이트합니다.
     """
     try:
         data = request.json
@@ -136,12 +137,63 @@ def resolve_unchecked_description():
 
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("UPDATE unchecked_descriptions SET resolved = TRUE WHERE id = %s", (unchecked_id,))
+
+        # 1. 미체크 항목 정보 조회
+        cursor.execute("""
+            SELECT content, training_course, created_at 
+            FROM unchecked_descriptions 
+            WHERE id = %s
+        """, (unchecked_id,))
+        unchecked_item = cursor.fetchone()
+        
+        if not unchecked_item:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "해당 미체크 항목을 찾을 수 없습니다."}), 404
+
+        content, training_course, created_date = unchecked_item
+
+        # 2. task_items에서 해당 task_id 찾기
+        cursor.execute("""
+            SELECT id FROM task_items 
+            WHERE task_name = %s
+        """, (content,))
+        task_item = cursor.fetchone()
+        
+        if task_item:
+            task_id = task_item[0]
+            # 3. task_checklist 업데이트 또는 새로운 체크 기록 추가
+            cursor.execute("""
+                UPDATE task_checklist 
+                SET is_checked = TRUE 
+                WHERE task_id = %s 
+                AND training_course = %s 
+                AND DATE(checked_date) = DATE(%s)
+            """, (task_id, training_course, created_date))
+
+            if cursor.rowcount == 0:  # 해당 날짜의 체크 기록이 없는 경우
+                cursor.execute("""
+                    INSERT INTO task_checklist 
+                    (task_id, training_course, is_checked, checked_date, username)
+                    VALUES (%s, %s, TRUE, %s, 'admin_resolved')
+                """, (task_id, training_course, created_date))
+
+        # 4. 미체크 항목을 해결 상태로 변경
+        cursor.execute("""
+            UPDATE unchecked_descriptions 
+            SET resolved = TRUE 
+            WHERE id = %s
+        """, (unchecked_id,))
+
         conn.commit()
         cursor.close()
         conn.close()
 
-        return jsonify({"success": True, "message": "미체크 항목이 해결되었습니다."}), 200
+        return jsonify({
+            "success": True, 
+            "message": "미체크 항목이 해결되었으며, 체크 상태가 업데이트되었습니다."
+        }), 200
+
     except Exception as e:
         logging.error("Error resolving unchecked description", exc_info=True)
         return jsonify({"success": False, "message": "미체크 항목 해결 실패"}), 500
