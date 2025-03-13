@@ -100,7 +100,7 @@ def save_task_checklist():
     summary: 업무 체크리스트를 저장합니다.
     description: |
       업무 체크리스트를 저장합니다.
-      - 같은 날짜에 데이터가 있는 경우 UPDATE
+      - 같은 날짜(년,월,일)에 데이터가 있는 경우 UPDATE
       - 없는 경우 새로 INSERT
       - 체크되지 않은 항목은 unchecked_descriptions 테이블에서 기존 항목을 삭제 후 새로 등록
     parameters:
@@ -182,11 +182,13 @@ def save_task_checklist():
             # 트랜잭션 시작
             cursor.execute("BEGIN")
 
-            # 해당 날짜의 체크리스트 데이터 확인
+            # 해당 날짜의 체크리스트 데이터 확인 (시간 제외)
             cursor.execute("""
                 SELECT id FROM task_checklist 
-                WHERE task_id = %s AND date = %s AND training_course = %s
-            """, (task_id, date, training_course))
+                WHERE task_id = %s 
+                AND training_course = %s 
+                AND DATE(date) = DATE(%s)
+            """, (task_id, training_course, date))
             existing_record = cursor.fetchone()
 
             if existing_record:
@@ -194,9 +196,11 @@ def save_task_checklist():
                 cursor.execute("""
                     UPDATE task_checklist 
                     SET is_checked = %s, description = %s, updated_at = NOW()
-                    WHERE task_id = %s AND date = %s AND training_course = %s
+                    WHERE task_id = %s 
+                    AND training_course = %s 
+                    AND DATE(date) = DATE(%s)
                     RETURNING id
-                """, (is_checked, description, task_id, date, training_course))
+                """, (is_checked, description, task_id, training_course, date))
             else:
                 # 새로운 데이터 INSERT
                 cursor.execute("""
@@ -210,14 +214,14 @@ def save_task_checklist():
 
             # 체크되지 않은 항목 처리
             if not is_checked:
-                # 기존 미체크 항목 삭제 (resolved가 false인 항목만)
+                # 기존 미체크 항목 삭제 (resolved가 false이고 같은 날짜인 항목만)
                 cursor.execute("""
                     DELETE FROM unchecked_descriptions
                     WHERE task_id = %s 
-                    AND date = %s 
-                    AND training_course = %s
+                    AND training_course = %s 
+                    AND DATE(date) = DATE(%s)
                     AND resolved = false
-                """, (task_id, date, training_course))
+                """, (task_id, training_course, date))
                 
                 # 새로운 미체크 항목 등록
                 cursor.execute("""
@@ -230,10 +234,10 @@ def save_task_checklist():
                 cursor.execute("""
                     DELETE FROM unchecked_descriptions
                     WHERE task_id = %s 
-                    AND date = %s 
-                    AND training_course = %s
+                    AND training_course = %s 
+                    AND DATE(date) = DATE(%s)
                     AND resolved = false
-                """, (task_id, date, training_course))
+                """, (task_id, training_course, date))
 
             # 트랜잭션 커밋
             cursor.execute("COMMIT")
