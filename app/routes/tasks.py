@@ -11,17 +11,18 @@ def get_tasks():
     업무 목록 조회 API
     ---
     tags:
-      - Tasks
+    - Tasks
     summary: 훈련 과정별 업무 목록을 조회합니다.
-    description: 특정 훈련 과정의 모든 업무 항목을 조회합니다.
-        * 훈련 과정명을 쿼리 파라미터로 받아 해당 과정의 업무 목록 반환
-        * 각 업무의 체크 상태도 함께 반환
+    description: |
+      특정 훈련 과정의 모든 업무 항목을 조회합니다.
+      - 훈련 과정명을 쿼리 파라미터로 받아 해당 과정의 업무 목록 반환
+      - 각 업무의 체크 상태도 함께 반환
     parameters:
-      - name: training_course
-        in: query
-        type: string
-        required: true
-        description: 훈련 과정명
+    - in: query
+      name: training_course
+      type: string
+      required: true
+      description: 훈련 과정명
     responses:
       200:
         description: 업무 목록 조회 성공
@@ -101,41 +102,42 @@ def save_task_checklist():
     업무 체크리스트 저장 API
     ---
     tags:
-      - Tasks
+    - Tasks
     summary: 업무 체크리스트를 저장합니다.
-    description: 업무 체크리스트를 저장합니다.
-        * 같은 날짜(년,월,일)에 데이터가 있는 경우 UPDATE
-        * 없는 경우 새로 INSERT
-        * 체크되지 않은 항목은 unchecked_descriptions 테이블에서 기존 항목을 삭제 후 새로 등록
+    description: |
+      업무 체크리스트를 저장합니다.
+      - 같은 날짜에 데이터가 있는 경우 UPDATE
+      - 없는 경우 새로 INSERT
+      - 체크되지 않은 항목은 미체크 항목 테이블에서 기존 항목을 삭제 후 새로 등록
     parameters:
-      - name: body
-        in: body
-        required: true
-        schema:
-          type: object
-          required:
-            - task_id
-            - training_course
-            - date
-            - is_checked
-            - description
-          properties:
-            task_id:
-              type: integer
-              description: 업무 ID
-            training_course:
-              type: string
-              description: 훈련 과정명
-            date:
-              type: string
-              format: date
-              description: 체크리스트 날짜
-            is_checked:
-              type: boolean
-              description: 체크 여부
-            description:
-              type: string
-              description: 업무 설명
+    - in: body
+      name: body
+      required: true
+      schema:
+        type: object
+        required:
+        - task_id
+        - training_course
+        - date
+        - is_checked
+        - description
+        properties:
+          task_id:
+            type: integer
+            description: 업무 ID
+          training_course:
+            type: string
+            description: 훈련 과정명
+          date:
+            type: string
+            format: date
+            description: 체크리스트 날짜
+          is_checked:
+            type: boolean
+            description: 체크 여부
+          description:
+            type: string
+            description: 업무 설명
     responses:
       201:
         description: 체크리스트 저장 성공
@@ -283,31 +285,32 @@ def check_task():
     업무 체크 상태 변경 API
     ---
     tags:
-      - Tasks
+    - Tasks
     summary: 특정 업무의 체크 상태를 변경합니다.
-    description: 업무의 체크 상태를 변경하고 기록합니다.
-        * 체크되지 않은 업무를 체크하거나, 체크된 업무를 체크 해제
-        * 변경 시 task_checklist 테이블에 기록 저장
+    description: |
+      업무의 체크 상태를 변경하고 기록합니다.
+      - 체크되지 않은 업무를 체크하거나, 체크된 업무를 체크 해제
+      - 변경 시 체크리스트 테이블에 기록 저장
     parameters:
-      - name: body
-        in: body
-        required: true
-        schema:
-          type: object
-          required:
-            - task_id
-            - training_course
-            - is_checked
-          properties:
-            task_id:
-              type: integer
-              description: 업무 ID
-            training_course:
-              type: string
-              description: 훈련 과정명
-            is_checked:
-              type: boolean
-              description: 체크 상태 (true/false)
+    - in: body
+      name: body
+      required: true
+      schema:
+        type: object
+        required:
+        - task_id
+        - training_course
+        - is_checked
+        properties:
+          task_id:
+            type: integer
+            description: 업무 ID
+          training_course:
+            type: string
+            description: 훈련 과정명
+          is_checked:
+            type: boolean
+            description: 체크 상태 (true/false)
     responses:
       200:
         description: 체크 상태 변경 성공
