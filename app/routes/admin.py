@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, render_template, redirect, url_for, session
+from flask import Blueprint, jsonify, render_template, redirect, url_for, session, request
 from app.database import get_db_connection
 import logging
 from datetime import datetime, date, timedelta
@@ -158,10 +158,11 @@ def get_combined_task_status():
     ---
     tags:
       - Admin Task Status
-    summary: 훈련 과정별 당일 및 월별 누적 체크율을 조회합니다.
+    summary: 훈련 과정별 당일, 전날 및 월별 누적 체크율을 조회합니다.
     description: |
-      각 훈련 과정별로 당일 체크율과 월별 누적 체크율을 함께 반환합니다.
+      각 훈련 과정별로 당일, 전날, 월별 체크율을 함께 반환합니다.
       - 당일 체크율: 해당일의 체크 완료된 업무 비율
+      - 전날 체크율: 전날의 체크 완료된 업무 비율
       - 월별 누적 체크율: 해당 월의 전체 업무 중 체크 완료된 업무 비율
       - 체크된 항목과 미체크 항목 중 해결된 항목을 모두 포함하여 계산
       - 체크율은 소수점 둘째 자리까지 계산
@@ -191,6 +192,9 @@ def get_combined_task_status():
                   daily_check_rate:
                     type: string
                     description: 당일 체크율 (백분율)
+                  yesterday_check_rate:
+                    type: string
+                    description: 전날 체크율 (백분율)
                   monthly_check_rate:
                     type: string
                     description: 월별 누적 체크율 (백분율)
@@ -217,40 +221,52 @@ def get_combined_task_status():
         last_date = date(today.year, today.month, last_day)
 
         cursor.execute('''
-            WITH monthly_checks AS (
+            WITH check_data AS (
                 SELECT 
                     tc.training_course,
                     ti.dept,
                     ti.manager_name,
+                    -- 월별 데이터
                     COUNT(*) AS total_tasks,
                     SUM(CASE 
                         WHEN tc.is_checked THEN 1
                         WHEN EXISTS (
                             SELECT 1 FROM unchecked_descriptions ud
-                            WHERE ud.content = (
-                                SELECT task_name FROM task_items WHERE id = tc.task_id
-                            )
+                            WHERE ud.task_id = tc.task_id
                             AND ud.training_course = tc.training_course
-                            AND DATE(ud.created_at) = DATE(tc.checked_date)
+                            AND DATE(ud.date) = DATE(tc.checked_date)
                             AND ud.resolved = TRUE
                         ) THEN 1
                         ELSE 0 
                     END) AS checked_tasks,
+                    -- 당일 데이터
                     SUM(CASE WHEN DATE(tc.checked_date) = CURRENT_DATE THEN 1 ELSE 0 END) AS daily_total_tasks,
                     SUM(CASE 
                         WHEN DATE(tc.checked_date) = CURRENT_DATE AND (
                             tc.is_checked OR EXISTS (
                                 SELECT 1 FROM unchecked_descriptions ud
-                                WHERE ud.content = (
-                                    SELECT task_name FROM task_items WHERE id = tc.task_id
-                                )
+                                WHERE ud.task_id = tc.task_id
                                 AND ud.training_course = tc.training_course
-                                AND DATE(ud.created_at) = CURRENT_DATE
+                                AND DATE(ud.date) = CURRENT_DATE
                                 AND ud.resolved = TRUE
                             )
                         ) THEN 1 
                         ELSE 0 
-                    END) AS daily_checked_tasks
+                    END) AS daily_checked_tasks,
+                    -- 전날 데이터
+                    SUM(CASE WHEN DATE(tc.checked_date) = CURRENT_DATE - INTERVAL '1 day' THEN 1 ELSE 0 END) AS yesterday_total_tasks,
+                    SUM(CASE 
+                        WHEN DATE(tc.checked_date) = CURRENT_DATE - INTERVAL '1 day' AND (
+                            tc.is_checked OR EXISTS (
+                                SELECT 1 FROM unchecked_descriptions ud
+                                WHERE ud.task_id = tc.task_id
+                                AND ud.training_course = tc.training_course
+                                AND DATE(ud.date) = CURRENT_DATE - INTERVAL '1 day'
+                                AND ud.resolved = TRUE
+                            )
+                        ) THEN 1 
+                        ELSE 0 
+                    END) AS yesterday_checked_tasks
                 FROM task_checklist tc
                 JOIN training_info ti ON tc.training_course = ti.training_course
                 WHERE DATE(tc.checked_date) BETWEEN %s AND %s
@@ -263,8 +279,10 @@ def get_combined_task_status():
                 total_tasks,
                 checked_tasks,
                 daily_total_tasks,
-                daily_checked_tasks
-            FROM monthly_checks
+                daily_checked_tasks,
+                yesterday_total_tasks,
+                yesterday_checked_tasks
+            FROM check_data
         ''', (first_date, last_date))
 
         results = cursor.fetchall()
@@ -280,24 +298,27 @@ def get_combined_task_status():
             checked_tasks = row[4] if row[4] else 0
             daily_total_tasks = row[5] if row[5] else 0
             daily_checked_tasks = row[6] if row[6] else 0
+            yesterday_total_tasks = row[7] if row[7] else 0
+            yesterday_checked_tasks = row[8] if row[8] else 0
 
-            # 월별 누적 체크율 계산
+            # 각종 체크율 계산
             monthly_check_rate = round((checked_tasks / total_tasks) * 100, 2) if total_tasks > 0 else 0
-            # 당일 체크율 계산
             daily_check_rate = round((daily_checked_tasks / daily_total_tasks) * 100, 2) if daily_total_tasks > 0 else 0
+            yesterday_check_rate = round((yesterday_checked_tasks / yesterday_total_tasks) * 100, 2) if yesterday_total_tasks > 0 else 0
 
             task_status.append({
                 "training_course": training_course,
                 "dept": dept,
                 "manager_name": manager_name,
                 "daily_check_rate": f"{daily_check_rate}%",
+                "yesterday_check_rate": f"{yesterday_check_rate}%",
                 "monthly_check_rate": f"{monthly_check_rate}%"
             })
 
         return jsonify({"success": True, "data": task_status}), 200
     except Exception as e:
         logging.error("Error retrieving combined task status", exc_info=True)
-        return jsonify({"success": False, "message": "Failed to retrieve task status"}), 500 
+        return jsonify({"success": False, "message": "체크율 조회 중 오류가 발생했습니다."}), 500
 
 @bp.route('/admin/previous_day_task_status', methods=['GET'])
 def get_previous_day_task_status():
@@ -415,3 +436,169 @@ def get_previous_day_task_status():
     finally:
         cursor.close()
         conn.close() 
+
+@bp.route('/admin/check_rates', methods=['GET'])
+def get_check_rates():
+    """
+    체크율 조회 API
+    ---
+    tags:
+    - Admin
+    summary: 당일과 전날의 체크율을 조회합니다.
+    description: |
+      당일과 전날의 체크율 정보를 한 번에 조회합니다.
+      - 당일 체크율: 현재 시점의 체크 완료율
+      - 전날 체크율: 전날의 최종 체크 완료율
+      - 미체크 항목이 해결된 경우도 체크율에 반영
+    parameters:
+    - in: query
+      name: training_course
+      type: string
+      required: true
+      description: 훈련 과정명
+    responses:
+      200:
+        description: 체크율 조회 성공
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              description: 성공 여부
+            data:
+              type: object
+              properties:
+                today:
+                  type: object
+                  properties:
+                    total_tasks:
+                      type: integer
+                      description: 전체 업무 수
+                    checked_tasks:
+                      type: integer
+                      description: 체크된 업무 수
+                    check_rate:
+                      type: number
+                      format: float
+                      description: 체크율 (%)
+                yesterday:
+                  type: object
+                  properties:
+                    total_tasks:
+                      type: integer
+                      description: 전체 업무 수
+                    checked_tasks:
+                      type: integer
+                      description: 체크된 업무 수
+                    check_rate:
+                      type: number
+                      format: float
+                      description: 체크율 (%)
+      500:
+        description: 서버 오류
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              description: 성공 여부
+            message:
+              type: string
+              description: 오류 메시지
+    """
+    try:
+        training_course = request.args.get('training_course')
+        if not training_course:
+            return jsonify({
+                "success": False,
+                "message": "훈련 과정명이 필요합니다."
+            }), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # 당일 체크율 조회
+        cursor.execute("""
+            WITH task_status AS (
+                SELECT 
+                    COUNT(*) as total_tasks,
+                    COUNT(CASE 
+                        WHEN tc.is_checked = true OR 
+                             (ud.resolved = true AND ud.date = CURRENT_DATE)
+                        THEN 1 
+                    END) as checked_tasks
+                FROM task_items ti
+                LEFT JOIN task_checklist tc ON ti.id = tc.task_id 
+                    AND tc.training_course = %s
+                    AND DATE(tc.date) = CURRENT_DATE
+                LEFT JOIN unchecked_descriptions ud ON ti.id = ud.task_id 
+                    AND ud.training_course = %s
+                    AND DATE(ud.date) = CURRENT_DATE
+            )
+            SELECT total_tasks, checked_tasks,
+                   CASE 
+                       WHEN total_tasks > 0 
+                       THEN ROUND((checked_tasks::float / total_tasks) * 100, 2)
+                       ELSE 0 
+                   END as check_rate
+            FROM task_status
+        """, (training_course, training_course))
+        
+        today_result = cursor.fetchone()
+        today_data = {
+            "total_tasks": today_result[0],
+            "checked_tasks": today_result[1],
+            "check_rate": today_result[2]
+        }
+
+        # 전날 체크율 조회
+        cursor.execute("""
+            WITH task_status AS (
+                SELECT 
+                    COUNT(*) as total_tasks,
+                    COUNT(CASE 
+                        WHEN tc.is_checked = true OR 
+                             (ud.resolved = true AND ud.date = CURRENT_DATE - INTERVAL '1 day')
+                        THEN 1 
+                    END) as checked_tasks
+                FROM task_items ti
+                LEFT JOIN task_checklist tc ON ti.id = tc.task_id 
+                    AND tc.training_course = %s
+                    AND DATE(tc.date) = CURRENT_DATE - INTERVAL '1 day'
+                LEFT JOIN unchecked_descriptions ud ON ti.id = ud.task_id 
+                    AND ud.training_course = %s
+                    AND DATE(ud.date) = CURRENT_DATE - INTERVAL '1 day'
+            )
+            SELECT total_tasks, checked_tasks,
+                   CASE 
+                       WHEN total_tasks > 0 
+                       THEN ROUND((checked_tasks::float / total_tasks) * 100, 2)
+                       ELSE 0 
+                   END as check_rate
+            FROM task_status
+        """, (training_course, training_course))
+        
+        yesterday_result = cursor.fetchone()
+        yesterday_data = {
+            "total_tasks": yesterday_result[0],
+            "checked_tasks": yesterday_result[1],
+            "check_rate": yesterday_result[2]
+        }
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "today": today_data,
+                "yesterday": yesterday_data
+            }
+        }), 200
+
+    except Exception as e:
+        logging.error("Error retrieving check rates", exc_info=True)
+        return jsonify({
+            "success": False,
+            "message": "체크율 조회 중 오류가 발생했습니다."
+        }), 500 
