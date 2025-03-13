@@ -13,10 +13,9 @@ def get_tasks():
     tags:
       - Tasks
     summary: 훈련 과정별 업무 목록을 조회합니다.
-    description: |
-      특정 훈련 과정의 모든 업무 항목을 조회합니다.
-      - 훈련 과정명을 쿼리 파라미터로 받아 해당 과정의 업무 목록 반환
-      - 각 업무의 체크 상태도 함께 반환
+    description: 특정 훈련 과정의 모든 업무 항목을 조회합니다.
+        * 훈련 과정명을 쿼리 파라미터로 받아 해당 과정의 업무 목록 반환
+        * 각 업무의 체크 상태도 함께 반환
     parameters:
       - name: training_course
         in: query
@@ -31,6 +30,7 @@ def get_tasks():
           properties:
             success:
               type: boolean
+              description: 성공 여부
             data:
               type: array
               items:
@@ -45,6 +45,9 @@ def get_tasks():
                   is_checked:
                     type: boolean
                     description: 체크 여부
+                  checklist_id:
+                    type: integer
+                    description: 체크리스트 ID
       500:
         description: 서버 오류
         schema:
@@ -52,8 +55,10 @@ def get_tasks():
           properties:
             success:
               type: boolean
+              description: 성공 여부
             message:
               type: string
+              description: 오류 메시지
     """
     try:
         training_course = request.args.get('training_course')
@@ -98,11 +103,10 @@ def save_task_checklist():
     tags:
       - Tasks
     summary: 업무 체크리스트를 저장합니다.
-    description: |
-      업무 체크리스트를 저장합니다.
-      - 같은 날짜(년,월,일)에 데이터가 있는 경우 UPDATE
-      - 없는 경우 새로 INSERT
-      - 체크되지 않은 항목은 unchecked_descriptions 테이블에서 기존 항목을 삭제 후 새로 등록
+    description: 업무 체크리스트를 저장합니다.
+        * 같은 날짜(년,월,일)에 데이터가 있는 경우 UPDATE
+        * 없는 경우 새로 INSERT
+        * 체크되지 않은 항목은 unchecked_descriptions 테이블에서 기존 항목을 삭제 후 새로 등록
     parameters:
       - name: body
         in: body
@@ -140,8 +144,13 @@ def save_task_checklist():
           properties:
             success:
               type: boolean
+              description: 성공 여부
             message:
               type: string
+              description: 성공 메시지
+            id:
+              type: integer
+              description: 저장된 체크리스트 ID
       400:
         description: 잘못된 요청
         schema:
@@ -149,8 +158,10 @@ def save_task_checklist():
           properties:
             success:
               type: boolean
+              description: 성공 여부
             message:
               type: string
+              description: 오류 메시지
       500:
         description: 서버 오류
         schema:
@@ -158,8 +169,10 @@ def save_task_checklist():
           properties:
             success:
               type: boolean
+              description: 성공 여부
             message:
               type: string
+              description: 오류 메시지
     """
     try:
         data = request.get_json()
@@ -272,10 +285,9 @@ def check_task():
     tags:
       - Tasks
     summary: 특정 업무의 체크 상태를 변경합니다.
-    description: |
-      업무의 체크 상태를 변경하고 기록합니다.
-      - 체크되지 않은 업무를 체크하거나, 체크된 업무를 체크 해제
-      - 변경 시 task_checklist 테이블에 기록 저장
+    description: 업무의 체크 상태를 변경하고 기록합니다.
+        * 체크되지 않은 업무를 체크하거나, 체크된 업무를 체크 해제
+        * 변경 시 task_checklist 테이블에 기록 저장
     parameters:
       - name: body
         in: body
@@ -304,7 +316,7 @@ def check_task():
           properties:
             success:
               type: boolean
-              description: API 호출 성공 여부
+              description: 성공 여부
             message:
               type: string
               description: 성공 메시지
@@ -315,8 +327,10 @@ def check_task():
           properties:
             success:
               type: boolean
+              description: 성공 여부
             message:
               type: string
+              description: 오류 메시지
     """
     try:
         data = request.get_json()
