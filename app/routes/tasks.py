@@ -1,270 +1,187 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify
 from app.database import get_db_connection
 import logging
-from datetime import datetime, date
+from datetime import datetime
 
-bp = Blueprint('tasks', __name__)
+# Blueprint 정의
+tasks_bp = Blueprint('tasks', __name__, url_prefix='/tasks')
 
-@bp.route('/tasks', methods=['GET'])
+def init_tasks_routes(app):
+    """
+    작업 관련 라우트를 초기화합니다.
+    """
+    app.register_blueprint(tasks_bp)
+
+@tasks_bp.route('/', methods=['GET'])
 def get_tasks():
     """
-    업무 목록 조회 API
+    작업 목록 조회 API
     ---
     tags:
-    - Tasks
-    summary: 훈련 과정별 업무 목록을 조회합니다.
+      - Tasks
+    summary: 작업 목록을 조회합니다.
     description: |
-      특정 훈련 과정의 모든 업무 항목을 조회합니다.
-      - 훈련 과정명을 쿼리 파라미터로 받아 해당 과정의 업무 목록 반환
-      - 각 업무의 체크 상태도 함께 반환
+      등록된 모든 작업 항목을 조회합니다.
+      필터링 옵션을 통해 특정 조건의 작업만 조회할 수 있습니다.
     parameters:
-    - in: query
-      name: training_course
-      type: string
-      required: true
-      description: 훈련 과정명
+      - name: training_course
+        in: query
+        type: string
+        required: false
+        description: 훈련 과정명으로 필터링
     responses:
       200:
-        description: 업무 목록 조회 성공
+        description: 작업 목록 조회 성공
         schema:
           type: object
           properties:
             success:
               type: boolean
-              description: 성공 여부
-            data:
+              example: true
+            tasks:
               type: array
               items:
                 type: object
                 properties:
-                  task_id:
+                  id:
                     type: integer
-                    description: 업무 ID
                   task_name:
                     type: string
-                    description: 업무명
-                  is_checked:
-                    type: boolean
-                    description: 체크 여부
-                  checklist_id:
-                    type: integer
-                    description: 체크리스트 ID
-      500:
-        description: 서버 오류
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              description: 성공 여부
-            message:
-              type: string
-              description: 오류 메시지
+                  description:
+                    type: string
     """
     try:
         training_course = request.args.get('training_course')
         
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT ti.id, ti.task_name, 
-                   COALESCE(tc.is_checked, FALSE) as is_checked,
-                   tc.id as checklist_id
-            FROM task_items ti
-            LEFT JOIN task_checklist tc ON ti.id = tc.task_id 
-                AND tc.training_course = %s 
-                AND DATE(tc.checked_date) = CURRENT_DATE
-            ORDER BY ti.id;
-        ''', (training_course,))
-        
+
+        query = "SELECT id, task_name, description FROM task_items"
+        params = []
+
+        if training_course:
+            query += " WHERE training_course = %s"
+            params.append(training_course)
+
+        cursor.execute(query, params)
         tasks = cursor.fetchall()
+        
         cursor.close()
         conn.close()
 
         return jsonify({
             "success": True,
-            "data": [{
-                "task_id": row[0],
-                "task_name": row[1],
-                "is_checked": row[2],
-                "checklist_id": row[3]
-            } for row in tasks]
+            "tasks": [
+                {
+                    "id": task[0],
+                    "task_name": task[1],
+                    "description": task[2]
+                }
+                for task in tasks
+            ]
         }), 200
 
     except Exception as e:
-        logging.error("Error retrieving tasks", exc_info=True)
-        return jsonify({"success": False, "message": "업무 목록을 불러오는 중 오류가 발생했습니다."}), 500
+        logging.error("작업 목록 조회 중 오류 발생", exc_info=True)
+        return jsonify({
+            "success": False,
+            "message": "작업 목록 조회 중 오류가 발생했습니다."
+        }), 500
 
-@bp.route('/tasks/checklist', methods=['POST'])
-def save_task_checklist():
+@tasks_bp.route('/checklist', methods=['POST'])
+def save_checklist():
     """
-    업무 체크리스트 저장 API
+    체크리스트 저장 API
     ---
     tags:
-    - Tasks
-    summary: 업무 체크리스트를 저장합니다.
+      - Tasks
+    summary: 작업 체크리스트를 저장합니다.
     description: |
-      업무 체크리스트를 저장합니다.
-      - 같은 날짜에 데이터가 있는 경우 UPDATE
-      - 없는 경우 새로 INSERT
-      - 체크되지 않은 항목은 미체크 항목 테이블에서 기존 항목을 삭제 후 새로 등록
+      작업 체크 상태를 저장합니다.
+      동일 날짜의 데이터가 있는 경우 업데이트합니다.
     parameters:
-    - in: body
-      name: body
-      required: true
-      schema:
-        type: object
-        required:
-        - task_id
-        - training_course
-        - date
-        - is_checked
-        - description
-        properties:
-          task_id:
-            type: integer
-            description: 업무 ID
-          training_course:
-            type: string
-            description: 훈련 과정명
-          date:
-            type: string
-            format: date
-            description: 체크리스트 날짜
-          is_checked:
-            type: boolean
-            description: 체크 여부
-          description:
-            type: string
-            description: 업무 설명
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - training_course
+            - date
+            - checklist
+          properties:
+            training_course:
+              type: string
+              description: 훈련 과정명
+            date:
+              type: string
+              format: date
+              description: 체크리스트 날짜
+            checklist:
+              type: array
+              items:
+                type: object
+                properties:
+                  task_id:
+                    type: integer
+                  is_checked:
+                    type: boolean
     responses:
-      201:
+      200:
         description: 체크리스트 저장 성공
         schema:
           type: object
           properties:
             success:
               type: boolean
-              description: 성공 여부
+              example: true
             message:
               type: string
-              description: 성공 메시지
-            id:
-              type: integer
-              description: 저장된 체크리스트 ID
-      400:
-        description: 잘못된 요청
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              description: 성공 여부
-            message:
-              type: string
-              description: 오류 메시지
-      500:
-        description: 서버 오류
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              description: 성공 여부
-            message:
-              type: string
-              description: 오류 메시지
+              example: "체크리스트가 저장되었습니다."
     """
     try:
         data = request.get_json()
-        task_id = data.get('task_id')
         training_course = data.get('training_course')
         date = data.get('date')
-        is_checked = data.get('is_checked')
-        description = data.get('description')
+        checklist = data.get('checklist')
 
-        if not all([task_id, training_course, date, isinstance(is_checked, bool), description]):
+        if not all([training_course, date, checklist]):
             return jsonify({
                 "success": False,
-                "message": "필수 입력값이 누락되었습니다."
+                "message": "필수 데이터가 누락되었습니다."
             }), 400
 
         conn = get_db_connection()
         cursor = conn.cursor()
 
+        # 트랜잭션 시작
+        cursor.execute("BEGIN")
+
         try:
-            # 트랜잭션 시작
-            cursor.execute("BEGIN")
-
-            # 해당 날짜의 체크리스트 데이터 확인 (시간 제외)
+            # 해당 날짜의 기존 데이터 삭제
             cursor.execute("""
-                SELECT id FROM task_checklist 
-                WHERE task_id = %s 
-                AND training_course = %s 
+                DELETE FROM task_checklist 
+                WHERE training_course = %s 
                 AND DATE(date) = DATE(%s)
-            """, (task_id, training_course, date))
-            existing_record = cursor.fetchone()
+            """, (training_course, date))
 
-            if existing_record:
-                # 기존 데이터가 있는 경우 UPDATE
-                cursor.execute("""
-                    UPDATE task_checklist 
-                    SET is_checked = %s, description = %s, updated_at = NOW()
-                    WHERE task_id = %s 
-                    AND training_course = %s 
-                    AND DATE(date) = DATE(%s)
-                    RETURNING id
-                """, (is_checked, description, task_id, training_course, date))
-            else:
-                # 새로운 데이터 INSERT
+            # 새로운 체크리스트 데이터 저장
+            for item in checklist:
                 cursor.execute("""
                     INSERT INTO task_checklist 
-                    (task_id, training_course, date, is_checked, description, created_at)
-                    VALUES (%s, %s, %s, %s, %s, NOW())
-                    RETURNING id
-                """, (task_id, training_course, date, is_checked, description))
-
-            checklist_id = cursor.fetchone()[0]
-
-            # 체크되지 않은 항목 처리
-            if not is_checked:
-                # 기존 미체크 항목 삭제 (resolved가 false이고 같은 날짜인 항목만)
-                cursor.execute("""
-                    DELETE FROM unchecked_descriptions
-                    WHERE task_id = %s 
-                    AND training_course = %s 
-                    AND DATE(date) = DATE(%s)
-                    AND resolved = false
-                """, (task_id, training_course, date))
-                
-                # 새로운 미체크 항목 등록
-                cursor.execute("""
-                    INSERT INTO unchecked_descriptions 
-                    (task_id, training_course, date, description, created_at)
-                    VALUES (%s, %s, %s, %s, NOW())
-                """, (task_id, training_course, date, description))
-            else:
-                # 체크된 경우 기존의 미해결 미체크 항목 삭제
-                cursor.execute("""
-                    DELETE FROM unchecked_descriptions
-                    WHERE task_id = %s 
-                    AND training_course = %s 
-                    AND DATE(date) = DATE(%s)
-                    AND resolved = false
-                """, (task_id, training_course, date))
+                    (task_id, training_course, date, is_checked)
+                    VALUES (%s, %s, %s, %s)
+                """, (
+                    item['task_id'],
+                    training_course,
+                    date,
+                    item['is_checked']
+                ))
 
             # 트랜잭션 커밋
             cursor.execute("COMMIT")
 
-            return jsonify({
-                "success": True,
-                "message": "체크리스트가 저장되었습니다.",
-                "id": checklist_id
-            }), 201
-
         except Exception as e:
-            # 오류 발생 시 롤백
             cursor.execute("ROLLBACK")
             raise e
 
@@ -272,94 +189,14 @@ def save_task_checklist():
             cursor.close()
             conn.close()
 
-    except Exception as e:
-        logging.error("Error saving task checklist", exc_info=True)
-        return jsonify({
-            "success": False,
-            "message": "체크리스트 저장 중 오류가 발생했습니다."
-        }), 500
-
-@bp.route('/tasks/check', methods=['POST'])
-def check_task():
-    """
-    업무 체크 상태 변경 API
-    ---
-    tags:
-    - Tasks
-    summary: 특정 업무의 체크 상태를 변경합니다.
-    description: |
-      업무의 체크 상태를 변경하고 기록합니다.
-      - 체크되지 않은 업무를 체크하거나, 체크된 업무를 체크 해제
-      - 변경 시 체크리스트 테이블에 기록 저장
-    parameters:
-    - in: body
-      name: body
-      required: true
-      schema:
-        type: object
-        required:
-        - task_id
-        - training_course
-        - is_checked
-        properties:
-          task_id:
-            type: integer
-            description: 업무 ID
-          training_course:
-            type: string
-            description: 훈련 과정명
-          is_checked:
-            type: boolean
-            description: 체크 상태 (true/false)
-    responses:
-      200:
-        description: 체크 상태 변경 성공
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              description: 성공 여부
-            message:
-              type: string
-              description: 성공 메시지
-      500:
-        description: 서버 오류
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              description: 성공 여부
-            message:
-              type: string
-              description: 오류 메시지
-    """
-    try:
-        data = request.get_json()
-        task_id = data.get('task_id')
-        training_course = data.get('training_course')
-        is_checked = data.get('is_checked')
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        cursor.execute('''
-            INSERT INTO task_checklist (task_id, training_course, is_checked, checked_date)
-            VALUES (%s, %s, %s, CURRENT_DATE)
-            ON CONFLICT (task_id, training_course, checked_date)
-            DO UPDATE SET is_checked = %s;
-        ''', (task_id, training_course, is_checked, is_checked))
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-
         return jsonify({
             "success": True,
-            "message": "업무 체크 상태가 변경되었습니다."
+            "message": "체크리스트가 저장되었습니다."
         }), 200
 
     except Exception as e:
-        logging.error("Error checking task", exc_info=True)
-        return jsonify({"success": False, "message": "업무 체크 상태 변경 중 오류가 발생했습니다."}), 500 
+        logging.error("체크리스트 저장 중 오류 발생", exc_info=True)
+        return jsonify({
+            "success": False,
+            "message": "체크리스트 저장 중 오류가 발생했습니다."
+        }), 500 

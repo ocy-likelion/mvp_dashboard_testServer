@@ -1,31 +1,39 @@
-from flask import Blueprint, request, jsonify, send_file
+from flask import Blueprint, request, jsonify
 from app.database import get_db_connection
-import pandas as pd
-import io
 import logging
 from datetime import datetime
 
-bp = Blueprint('issues', __name__)
+# Blueprint 정의
+issues_bp = Blueprint('issues', __name__, url_prefix='/issues')
 
-@bp.route('/issues', methods=['GET'])
+def init_issues_routes(app):
+    """
+    이슈 관련 라우트를 초기화합니다.
+    """
+    app.register_blueprint(issues_bp)
+
+@issues_bp.route('/', methods=['GET'])
 def get_issues():
     """
     이슈 목록 조회 API
     ---
     tags:
       - Issues
-    summary: 등록된 이슈 목록을 조회합니다.
+    summary: 이슈 목록을 조회합니다.
     description: |
-      시스템에 등록된 모든 이슈 목록을 조회합니다.
-      - 이슈 ID, 제목, 내용, 상태, 우선순위 등 반환
-      - 생성일시 기준 내림차순 정렬
-      - 해결 상태에 따른 필터링 가능
+      등록된 모든 이슈를 조회합니다.
+      필터링 옵션을 통해 특정 조건의 이슈만 조회할 수 있습니다.
     parameters:
+      - name: training_course
+        in: query
+        type: string
+        required: false
+        description: 훈련 과정명으로 필터링
       - name: status
         in: query
         type: string
         required: false
-        description: 이슈 상태 필터 (미해결/해결)
+        description: 상태로 필터링 (open/resolved)
     responses:
       200:
         description: 이슈 목록 조회 성공
@@ -34,86 +42,79 @@ def get_issues():
           properties:
             success:
               type: boolean
-              description: API 호출 성공 여부
-            data:
+              example: true
+            issues:
               type: array
               items:
                 type: object
                 properties:
                   id:
                     type: integer
-                    description: 이슈 ID
                   title:
                     type: string
-                    description: 이슈 제목
                   content:
                     type: string
-                    description: 이슈 내용
                   priority:
                     type: string
-                    description: 우선순위 (높음/중간/낮음)
                   status:
                     type: string
-                    description: 이슈 상태 (미해결/해결)
                   created_at:
                     type: string
                     format: date-time
-                    description: 생성일시
-                  resolved_at:
-                    type: string
-                    format: date-time
-                    description: 해결일시 (해결된 경우에만)
-      500:
-        description: 서버 오류
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-            message:
-              type: string
     """
     try:
+        training_course = request.args.get('training_course')
         status = request.args.get('status')
         
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        query = '''
-            SELECT id, title, content, priority, status, created_at, resolved_at 
+
+        query = """
+            SELECT id, title, content, priority, status, created_at 
             FROM issues 
-        '''
+            WHERE 1=1
+        """
         params = []
-        
+
+        if training_course:
+            query += " AND training_course = %s"
+            params.append(training_course)
+
         if status:
-            query += ' WHERE status = %s'
+            query += " AND status = %s"
             params.append(status)
-            
-        query += ' ORDER BY created_at DESC'
-        
-        cursor.execute(query, params if params else None)
+
+        query += " ORDER BY created_at DESC"
+
+        cursor.execute(query, params)
         issues = cursor.fetchall()
+        
         cursor.close()
         conn.close()
 
         return jsonify({
             "success": True,
-            "data": [{
-                "id": row[0],
-                "title": row[1],
-                "content": row[2],
-                "priority": row[3],
-                "status": row[4],
-                "created_at": row[5],
-                "resolved_at": row[6]
-            } for row in issues]
+            "issues": [
+                {
+                    "id": issue[0],
+                    "title": issue[1],
+                    "content": issue[2],
+                    "priority": issue[3],
+                    "status": issue[4],
+                    "created_at": issue[5].isoformat() if issue[5] else None
+                }
+                for issue in issues
+            ]
         }), 200
 
     except Exception as e:
-        logging.error("Error retrieving issues", exc_info=True)
-        return jsonify({"success": False, "message": "이슈 목록을 불러오는 중 오류가 발생했습니다."}), 500
+        logging.error("이슈 목록 조회 중 오류 발생", exc_info=True)
+        return jsonify({
+            "success": False,
+            "message": "이슈 목록 조회 중 오류가 발생했습니다."
+        }), 500
 
-@bp.route('/issues', methods=['POST'])
+@issues_bp.route('/', methods=['POST'])
 def create_issue():
     """
     이슈 등록 API
@@ -122,11 +123,8 @@ def create_issue():
       - Issues
     summary: 새로운 이슈를 등록합니다.
     description: |
-      새로운 이슈를 시스템에 등록합니다.
-      - 이슈 제목, 내용, 우선순위는 필수 입력 항목
-      - 초기 상태는 '미해결'로 설정
-      - 생성일시는 자동으로 현재 시간 저장
-      - 우선순위는 '높음', '중간', '낮음' 중 하나여야 함
+      새로운 이슈를 등록합니다.
+      제목, 내용, 우선순위, 훈련 과정명이 필요합니다.
     parameters:
       - name: body
         in: body
@@ -137,6 +135,7 @@ def create_issue():
             - title
             - content
             - priority
+            - training_course
           properties:
             title:
               type: string
@@ -146,8 +145,10 @@ def create_issue():
               description: 이슈 내용
             priority:
               type: string
-              enum: [높음, 중간, 낮음]
-              description: 우선순위
+              description: 우선순위 (high/medium/low)
+            training_course:
+              type: string
+              description: 훈련 과정명
     responses:
       201:
         description: 이슈 등록 성공
@@ -156,107 +157,69 @@ def create_issue():
           properties:
             success:
               type: boolean
-              description: API 호출 성공 여부
+              example: true
             message:
               type: string
-              description: 성공 메시지
-      400:
-        description: 잘못된 요청
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-            message:
-              type: string
-      500:
-        description: 서버 오류
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-            message:
-              type: string
+              example: "이슈가 등록되었습니다."
     """
     try:
         data = request.get_json()
-        title = data.get('title', '').strip()
-        content = data.get('content', '').strip()
-        priority = data.get('priority', '').strip()
+        title = data.get('title')
+        content = data.get('content')
+        priority = data.get('priority')
+        training_course = data.get('training_course')
 
-        if not title or not content or not priority:
-            return jsonify({"success": False, "message": "제목, 내용, 우선순위를 모두 입력하세요."}), 400
-
-        if priority not in ['높음', '중간', '낮음']:
-            return jsonify({"success": False, "message": "유효하지 않은 우선순위입니다."}), 400
+        if not all([title, content, priority, training_course]):
+            return jsonify({
+                "success": False,
+                "message": "필수 데이터가 누락되었습니다."
+            }), 400
 
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO issues (title, content, priority, status, created_at)
-            VALUES (%s, %s, %s, '미해결', NOW())
-        ''', (title, content, priority))
+
+        cursor.execute("""
+            INSERT INTO issues 
+            (title, content, priority, training_course, status, created_at)
+            VALUES (%s, %s, %s, %s, 'open', %s)
+            RETURNING id
+        """, (title, content, priority, training_course, datetime.now()))
+
+        issue_id = cursor.fetchone()[0]
+        
         conn.commit()
         cursor.close()
         conn.close()
 
-        return jsonify({"success": True, "message": "이슈가 등록되었습니다."}), 201
+        return jsonify({
+            "success": True,
+            "message": "이슈가 등록되었습니다.",
+            "id": issue_id
+        }), 201
 
     except Exception as e:
-        logging.error("Error creating issue", exc_info=True)
-        return jsonify({"success": False, "message": "이슈 등록 중 오류가 발생했습니다."}), 500
+        logging.error("이슈 등록 중 오류 발생", exc_info=True)
+        return jsonify({
+            "success": False,
+            "message": "이슈 등록 중 오류가 발생했습니다."
+        }), 500
 
-@bp.route('/issues/comments', methods=['POST'])
-def add_issue_comment():
-    """
-    이슈사항에 대한 댓글 저장 API
-    ---
-    tags:
-      - Issues
-    """
-    try:
-        data = request.json
-        issue_id = data.get('issue_id')
-        comment = data.get('comment')
-
-        if not issue_id or not comment:
-            return jsonify({"success": False, "message": "이슈 ID와 댓글 내용을 입력하세요."}), 400
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO issue_comments (issue_id, comment, created_at) VALUES (%s, %s, NOW())",
-            (issue_id, comment)
-        )
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        return jsonify({"success": True, "message": "댓글이 저장되었습니다."}), 201
-    except Exception as e:
-        logging.error("Error saving issue comment", exc_info=True)
-        return jsonify({"success": False, "message": "댓글 저장 실패"}), 500
-
-@bp.route('/issues/<int:issue_id>/resolve', methods=['POST'])
-def resolve_issue():
+@issues_bp.route('/<int:issue_id>/resolve', methods=['POST'])
+def resolve_issue(issue_id):
     """
     이슈 해결 처리 API
     ---
     tags:
       - Issues
-    summary: 특정 이슈를 해결 처리합니다.
+    summary: 이슈를 해결 처리합니다.
     description: |
-      지정된 이슈의 상태를 해결로 변경합니다.
-      - 이슈 상태를 '해결'로 변경
-      - 해결일시를 현재 시간으로 기록
-      - 이미 해결된 이슈는 다시 해결 처리할 수 없음
+      이슈를 해결 처리하고 해결 시간을 기록합니다.
     parameters:
       - name: issue_id
         in: path
         type: integer
         required: true
-        description: 해결 처리할 이슈의 ID
+        description: 이슈 ID
     responses:
       200:
         description: 이슈 해결 처리 성공
@@ -265,51 +228,27 @@ def resolve_issue():
           properties:
             success:
               type: boolean
-              description: API 호출 성공 여부
+              example: true
             message:
               type: string
-              description: 성공 메시지
-      404:
-        description: 이슈를 찾을 수 없음
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-            message:
-              type: string
-      500:
-        description: 서버 오류
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-            message:
-              type: string
+              example: "이슈가 해결 처리되었습니다."
     """
     try:
-        issue_id = request.view_args.get('issue_id')
-        
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # 이슈 존재 여부 확인
-        cursor.execute('SELECT status FROM issues WHERE id = %s', (issue_id,))
-        issue = cursor.fetchone()
-        
-        if not issue:
-            return jsonify({"success": False, "message": "해당 이슈를 찾을 수 없습니다."}), 404
-            
-        if issue[0] == '해결':
-            return jsonify({"success": False, "message": "이미 해결된 이슈입니다."}), 400
 
-        # 이슈 해결 처리
-        cursor.execute('''
+        cursor.execute("""
             UPDATE issues 
-            SET status = '해결', resolved_at = NOW() 
-            WHERE id = %s
-        ''', (issue_id,))
+            SET status = 'resolved', resolved_at = %s 
+            WHERE id = %s AND status = 'open'
+            RETURNING id
+        """, (datetime.now(), issue_id))
+
+        if cursor.fetchone() is None:
+            return jsonify({
+                "success": False,
+                "message": "이슈를 찾을 수 없거나 이미 해결되었습니다."
+            }), 404
         
         conn.commit()
         cursor.close()
@@ -321,40 +260,8 @@ def resolve_issue():
         }), 200
 
     except Exception as e:
-        logging.error("Error resolving issue", exc_info=True)
-        return jsonify({"success": False, "message": "이슈 해결 처리 중 오류가 발생했습니다."}), 500
-
-@bp.route('/issues/download', methods=['GET'])
-def download_issues():
-    """
-    이슈사항을 Excel 파일로 다운로드하는 API
-    ---
-    tags:
-      - Issues
-    """
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        cursor.execute("SELECT id, content, date, training_course, created_at, resolved FROM issues")
-        issues = cursor.fetchall()
-        cursor.close()
-        conn.close()
-
-        columns = ["ID", "이슈 내용", "날짜", "훈련 과정", "생성일", "해결됨"]
-        df = pd.DataFrame(issues, columns=columns)
-
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name="이슈사항")
-        output.seek(0)
-
-        return send_file(
-            output,
-            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            as_attachment=True,
-            download_name="이슈사항.xlsx"
-        )
-    except Exception as e:
-        logging.error("이슈사항 다운로드 실패", exc_info=True)
-        return jsonify({"success": False, "message": "이슈 다운로드 실패"}), 500 
+        logging.error("이슈 해결 처리 중 오류 발생", exc_info=True)
+        return jsonify({
+            "success": False,
+            "message": "이슈 해결 처리 중 오류가 발생했습니다."
+        }), 500 

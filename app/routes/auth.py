@@ -1,10 +1,17 @@
-from flask import Blueprint, request, jsonify, session, redirect, url_for
+from flask import Blueprint, request, jsonify, session
 from app.database import get_db_connection
 import logging
 
-bp = Blueprint('auth', __name__)
+# Blueprint 정의
+auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
-@bp.route('/login', methods=['POST'])
+def init_auth_routes(app):
+    """
+    인증 관련 라우트를 초기화합니다.
+    """
+    app.register_blueprint(auth_bp)
+
+@auth_bp.route('/login', methods=['POST'])
 def login():
     """
     사용자 로그인 API
@@ -14,8 +21,7 @@ def login():
     summary: 사용자 로그인을 처리합니다.
     description: |
       사용자 이름과 비밀번호를 검증하고 로그인을 처리합니다.
-      - 로그인 성공 시 세션에 사용자 정보 저장
-      - 실패 시 적절한 에러 메시지 반환
+      성공 시 세션에 사용자 정보를 저장합니다.
     parameters:
       - name: body
         in: body
@@ -40,79 +46,59 @@ def login():
           properties:
             success:
               type: boolean
-              description: 로그인 성공 여부
+              example: true
             message:
               type: string
-              description: 성공 메시지
+              example: "로그인 성공"
       401:
-        description: 로그인 실패
+        description: 인증 실패
         schema:
           type: object
           properties:
             success:
               type: boolean
-              description: 로그인 실패 여부
+              example: false
             message:
               type: string
-              description: 실패 사유
-      500:
-        description: 서버 오류
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-            message:
-              type: string
+              example: "사용자 이름 또는 비밀번호가 잘못되었습니다."
     """
     try:
         data = request.get_json()
-        username = data.get('username')  # user_id 대신 username 사용
+        username = data.get('username')
         password = data.get('password')
 
-        # 입력값 검증
         if not username or not password:
             return jsonify({
                 "success": False,
                 "message": "사용자 이름과 비밀번호를 모두 입력해주세요."
             }), 400
 
-        # 디버깅을 위한 로그
-        logging.info(f"Login attempt - username: {username}")
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        logging.info(f"로그인 시도 - username: {username}")
         
-        # 사용자 존재 여부 확인
-        cursor.execute('SELECT username, password FROM users WHERE username = %s', (username,))
-        user = cursor.fetchone()
+        user = authenticate_user(username, password)
         
-        # 디버깅을 위한 로그
-        logging.info(f"Database query result: {user is not None}")
-
-        cursor.close()
-        conn.close()
-
-        if user and user[1] == password:
-            session['user'] = user[0]  # username 저장
+        if user:
+            session['user'] = username
+            logging.info(f"로그인 성공 - username: {username}")
             return jsonify({
                 "success": True,
                 "message": "로그인 성공"
             }), 200
-        else:
-            return jsonify({
-                "success": False,
-                "message": "사용자 이름 또는 비밀번호가 잘못되었습니다."
-            }), 401
-
-    except Exception as e:
-        logging.error("Login error", exc_info=True)
+        
+        logging.warning(f"로그인 실패 - username: {username}")
         return jsonify({
             "success": False,
-            "message": f"로그인 처리 중 오류가 발생했습니다. 오류: {str(e)}"
+            "message": "사용자 이름 또는 비밀번호가 잘못되었습니다."
+        }), 401
+
+    except Exception as e:
+        logging.error("로그인 처리 중 오류 발생", exc_info=True)
+        return jsonify({
+            "success": False,
+            "message": "로그인 처리 중 오류가 발생했습니다."
         }), 500
 
-@bp.route('/logout', methods=['POST'])
+@auth_bp.route('/logout', methods=['POST'])
 def logout():
     """
     로그아웃 API
@@ -120,10 +106,7 @@ def logout():
     tags:
       - Authentication
     summary: 사용자 로그아웃을 처리합니다.
-    description: |
-      현재 로그인된 사용자의 세션을 종료합니다.
-      - 세션에서 사용자 정보 제거
-      - 로그아웃 후 로그인 페이지로 리다이렉트
+    description: 세션에서 사용자 정보를 제거합니다.
     responses:
       200:
         description: 로그아웃 성공
@@ -132,34 +115,74 @@ def logout():
           properties:
             success:
               type: boolean
-              description: 로그아웃 성공 여부
+              example: true
             message:
               type: string
-              description: 성공 메시지
+              example: "로그아웃 성공"
     """
-    session.pop('user', None)
-    return jsonify({"success": True, "message": "로그아웃 되었습니다."}), 200
+    try:
+        username = session.pop('user', None)
+        if username:
+            logging.info(f"로그아웃 성공 - username: {username}")
+        return jsonify({
+            "success": True,
+            "message": "로그아웃 성공"
+        }), 200
+    except Exception as e:
+        logging.error("로그아웃 처리 중 오류 발생", exc_info=True)
+        return jsonify({
+            "success": False,
+            "message": "로그아웃 처리 중 오류가 발생했습니다."
+        }), 500
 
-@bp.route('/current_user', methods=['GET'])
-def get_current_user():
+@auth_bp.route('/check', methods=['GET'])
+def check_auth():
     """
-    현재 로그인된 사용자 정보 조회 API
+    인증 상태 확인 API
     ---
     tags:
       - Authentication
-    summary: 현재 로그인된 사용자 정보를 반환합니다.
-    description: |
-      세션에 저장된 현재 로그인된 사용자 정보를 반환합니다.
-      - 로그인된 경우 사용자 ID 반환
-      - 로그인되지 않은 경우 null 반환
+    summary: 현재 사용자의 인증 상태를 확인합니다.
+    description: 세션에 저장된 사용자 정보를 확인합니다.
     responses:
       200:
-        description: 사용자 정보 조회 성공
+        description: 인증 상태 확인 성공
         schema:
           type: object
           properties:
-            user:
+            authenticated:
+              type: boolean
+              example: true
+            username:
               type: string
-              description: 로그인된 사용자 ID (없으면 null)
+              example: "user123"
     """
-    return jsonify({"user": session.get('user', None)}) 
+    username = session.get('user')
+    return jsonify({
+        "authenticated": bool(username),
+        "username": username
+    }), 200
+
+def authenticate_user(username: str, password: str) -> bool:
+    """
+    사용자 인증을 처리하는 헬퍼 함수
+    
+    Args:
+        username (str): 사용자 이름
+        password (str): 비밀번호
+    
+    Returns:
+        bool: 인증 성공 여부
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            'SELECT username, password FROM users WHERE username = %s',
+            (username,)
+        )
+        user = cursor.fetchone()
+        return user is not None and user[1] == password
+    finally:
+        cursor.close()
+        conn.close() 
