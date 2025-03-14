@@ -23,12 +23,12 @@ def login():
         schema:
           type: object
           required:
-            - username
+            - user_id
             - password
           properties:
-            username:
+            user_id:
               type: string
-              description: 사용자 이름
+              description: 사용자 ID
             password:
               type: string
               description: 사용자 비밀번호
@@ -67,8 +67,11 @@ def login():
     """
     try:
         data = request.get_json()
-        username = data.get('username')
+        user_id = data.get('user_id')
         password = data.get('password')
+
+        # user_id를 username으로 사용
+        username = user_id
 
         conn = get_db_connection()
         cursor = conn.cursor()
