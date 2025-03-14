@@ -23,15 +23,15 @@ def login():
         schema:
           type: object
           required:
-            - user_id
+            - username
             - password
           properties:
-            user_id:
+            username:
               type: string
-              description: 사용자 ID
+              description: 사용자 이름
             password:
               type: string
-              description: 사용자 비밀번호
+              description: 비밀번호
     responses:
       200:
         description: 로그인 성공
@@ -67,28 +67,50 @@ def login():
     """
     try:
         data = request.get_json()
-        user_id = data.get('user_id')
+        username = data.get('username')  # user_id 대신 username 사용
         password = data.get('password')
 
-        # user_id를 username으로 사용
-        username = user_id
+        # 입력값 검증
+        if not username or not password:
+            return jsonify({
+                "success": False,
+                "message": "사용자 이름과 비밀번호를 모두 입력해주세요."
+            }), 400
+
+        # 디버깅을 위한 로그
+        logging.info(f"Login attempt - username: {username}")
 
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE username = %s AND password = %s', (username, password))
+        
+        # 사용자 존재 여부 확인
+        cursor.execute('SELECT username, password FROM users WHERE username = %s', (username,))
         user = cursor.fetchone()
+        
+        # 디버깅을 위한 로그
+        logging.info(f"Database query result: {user is not None}")
+
         cursor.close()
         conn.close()
 
-        if user:
-            session['user'] = username
-            return jsonify({"success": True, "message": "로그인 성공"}), 200
+        if user and user[1] == password:
+            session['user'] = user[0]  # username 저장
+            return jsonify({
+                "success": True,
+                "message": "로그인 성공"
+            }), 200
         else:
-            return jsonify({"success": False, "message": "아이디 또는 비밀번호가 잘못되었습니다."}), 401
+            return jsonify({
+                "success": False,
+                "message": "사용자 이름 또는 비밀번호가 잘못되었습니다."
+            }), 401
 
     except Exception as e:
         logging.error("Login error", exc_info=True)
-        return jsonify({"success": False, "message": "로그인 처리 중 오류가 발생했습니다."}), 500
+        return jsonify({
+            "success": False,
+            "message": f"로그인 처리 중 오류가 발생했습니다. 오류: {str(e)}"
+        }), 500
 
 @bp.route('/logout', methods=['POST'])
 def logout():
