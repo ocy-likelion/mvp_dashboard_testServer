@@ -72,7 +72,7 @@ def login():
 
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE user_id = %s AND password = %s', (user_id, password))
+        cursor.execute('SELECT * FROM users WHERE username = %s AND password = %s', (user_id, password))
         user = cursor.fetchone()
         cursor.close()
         conn.close()
