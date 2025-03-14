@@ -1,39 +1,34 @@
 from flask import Flask
 from flask_cors import CORS
 from flasgger import Swagger
+import logging
+from app.config import Config
+
+# 로깅 설정
+logging.basicConfig(level=logging.ERROR)
 
 def create_app():
-    app = Flask(__name__)
-    CORS(app)
+    app = Flask(__name__, template_folder='templates')
     
-    # Swagger 설정
-    swagger = Swagger(app)
+    # 설정 적용
+    app.config.from_object(Config)
     
-    # 시크릿 키 설정
-    app.secret_key = 'your-secret-key'  # 실제 운영 환경에서는 환경 변수로 관리
+    # CORS 설정
+    CORS(app, supports_credentials=True)
     
-    # Blueprint 등록
-    from app.routes.auth import init_auth_routes
-    from app.routes.admin import init_admin_routes
-    from app.routes.tasks import init_tasks_routes
-    from app.routes.notices import init_notices_routes
-    from app.routes.unchecked import init_unchecked_routes
-    from app.routes.irregular_tasks import init_irregular_tasks_routes
-    from app.routes.issues import init_issues_routes
-    from app.routes.training import init_training_routes
+    # Swagger 초기화
+    Swagger(app)
     
-    # 각 Blueprint 초기화
-    init_auth_routes(app)
-    init_admin_routes(app)
-    init_tasks_routes(app)
-    init_notices_routes(app)
-    init_unchecked_routes(app)
-    init_irregular_tasks_routes(app)
-    init_issues_routes(app)
-    init_training_routes(app)
+    # 블루프린트 등록
+    from app.routes import auth, admin, tasks, irregular_tasks, notices, issues, training, unchecked
     
-    return app
-
-if __name__ == '__main__':
-    app = create_app()
-    app.run(debug=True) 
+    app.register_blueprint(auth.bp)
+    app.register_blueprint(admin.bp)
+    app.register_blueprint(tasks.bp)
+    app.register_blueprint(irregular_tasks.bp)
+    app.register_blueprint(notices.bp)
+    app.register_blueprint(issues.bp)
+    app.register_blueprint(training.bp)
+    app.register_blueprint(unchecked.bp)
+    
+    return app 
