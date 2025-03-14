@@ -220,105 +220,115 @@ def get_combined_task_status():
         first_date = date(today.year, today.month, 1)
         last_date = date(today.year, today.month, last_day)
 
-        cursor.execute('''
-            WITH check_data AS (
+        # 먼저 모든 훈련 과정 정보를 가져옴
+        cursor.execute("""
+            SELECT training_course, dept, manager_name
+            FROM training_info
+            WHERE end_date >= CURRENT_DATE
+        """)
+        training_courses = cursor.fetchall()
+
+        task_status = []
+        for course in training_courses:
+            training_course = course[0]
+            dept = course[1]
+            manager_name = course[2] if course[2] else "담당자 없음"
+
+            # 월별 체크율 계산
+            cursor.execute("""
                 SELECT 
-                    tc.training_course,
-                    ti.dept,
-                    ti.manager_name,
-                    -- 월별 데이터
-                    COUNT(*) AS total_tasks,
-                    SUM(CASE 
-                        WHEN tc.is_checked THEN 1
-                        WHEN EXISTS (
-                            SELECT 1 FROM unchecked_descriptions ud
-                            WHERE ud.task_id = tc.task_id
-                            AND ud.training_course = tc.training_course
-                            AND DATE(ud.date) = DATE(tc.checked_date)
-                            AND ud.resolved = TRUE
-                        ) THEN 1
-                        ELSE 0 
-                    END) AS checked_tasks,
-                    -- 당일 데이터
-                    SUM(CASE WHEN DATE(tc.checked_date) = CURRENT_DATE THEN 1 ELSE 0 END) AS daily_total_tasks,
-                    SUM(CASE 
-                        WHEN DATE(tc.checked_date) = CURRENT_DATE AND (
-                            tc.is_checked OR EXISTS (
-                                SELECT 1 FROM unchecked_descriptions ud
-                                WHERE ud.task_id = tc.task_id
+                    COUNT(DISTINCT tc.task_id) as total_tasks,
+                    COUNT(DISTINCT CASE 
+                        WHEN tc.is_checked OR 
+                             EXISTS (
+                                SELECT 1 FROM unchecked_descriptions ud 
+                                WHERE ud.task_id = tc.task_id 
+                                AND ud.training_course = tc.training_course
+                                AND DATE(ud.date) = DATE(tc.checked_date)
+                                AND ud.resolved = TRUE
+                             )
+                        THEN tc.task_id 
+                    END) as checked_tasks
+                FROM task_checklist tc
+                WHERE tc.training_course = %s
+                AND DATE(tc.checked_date) BETWEEN %s AND %s
+            """, (training_course, first_date, last_date))
+            
+            monthly_result = cursor.fetchone()
+            monthly_total = monthly_result[0] if monthly_result[0] else 0
+            monthly_checked = monthly_result[1] if monthly_result[1] else 0
+            monthly_rate = round((monthly_checked / monthly_total * 100), 2) if monthly_total > 0 else 0
+
+            # 당일 체크율 계산
+            cursor.execute("""
+                SELECT 
+                    COUNT(DISTINCT tc.task_id) as total_tasks,
+                    COUNT(DISTINCT CASE 
+                        WHEN tc.is_checked OR 
+                             EXISTS (
+                                SELECT 1 FROM unchecked_descriptions ud 
+                                WHERE ud.task_id = tc.task_id 
                                 AND ud.training_course = tc.training_course
                                 AND DATE(ud.date) = CURRENT_DATE
                                 AND ud.resolved = TRUE
-                            )
-                        ) THEN 1 
-                        ELSE 0 
-                    END) AS daily_checked_tasks,
-                    -- 전날 데이터
-                    SUM(CASE WHEN DATE(tc.checked_date) = CURRENT_DATE - INTERVAL '1 day' THEN 1 ELSE 0 END) AS yesterday_total_tasks,
-                    SUM(CASE 
-                        WHEN DATE(tc.checked_date) = CURRENT_DATE - INTERVAL '1 day' AND (
-                            tc.is_checked OR EXISTS (
-                                SELECT 1 FROM unchecked_descriptions ud
-                                WHERE ud.task_id = tc.task_id
+                             )
+                        THEN tc.task_id 
+                    END) as checked_tasks
+                FROM task_checklist tc
+                WHERE tc.training_course = %s
+                AND DATE(tc.checked_date) = CURRENT_DATE
+            """, (training_course,))
+            
+            daily_result = cursor.fetchone()
+            daily_total = daily_result[0] if daily_result[0] else 0
+            daily_checked = daily_result[1] if daily_result[1] else 0
+            daily_rate = round((daily_checked / daily_total * 100), 2) if daily_total > 0 else 0
+
+            # 전날 체크율 계산
+            cursor.execute("""
+                SELECT 
+                    COUNT(DISTINCT tc.task_id) as total_tasks,
+                    COUNT(DISTINCT CASE 
+                        WHEN tc.is_checked OR 
+                             EXISTS (
+                                SELECT 1 FROM unchecked_descriptions ud 
+                                WHERE ud.task_id = tc.task_id 
                                 AND ud.training_course = tc.training_course
                                 AND DATE(ud.date) = CURRENT_DATE - INTERVAL '1 day'
                                 AND ud.resolved = TRUE
-                            )
-                        ) THEN 1 
-                        ELSE 0 
-                    END) AS yesterday_checked_tasks
+                             )
+                        THEN tc.task_id 
+                    END) as checked_tasks
                 FROM task_checklist tc
-                JOIN training_info ti ON tc.training_course = ti.training_course
-                WHERE DATE(tc.checked_date) BETWEEN %s AND %s
-                GROUP BY tc.training_course, ti.dept, ti.manager_name
-            )
-            SELECT 
-                training_course,
-                dept,
-                manager_name,
-                total_tasks,
-                checked_tasks,
-                daily_total_tasks,
-                daily_checked_tasks,
-                yesterday_total_tasks,
-                yesterday_checked_tasks
-            FROM check_data
-        ''', (first_date, last_date))
-
-        results = cursor.fetchall()
-        cursor.close()
-        conn.close()
-
-        task_status = []
-        for row in results:
-            training_course = row[0]
-            dept = row[1]
-            manager_name = row[2] if row[2] else "담당자 없음"
-            total_tasks = row[3]
-            checked_tasks = row[4] if row[4] else 0
-            daily_total_tasks = row[5] if row[5] else 0
-            daily_checked_tasks = row[6] if row[6] else 0
-            yesterday_total_tasks = row[7] if row[7] else 0
-            yesterday_checked_tasks = row[8] if row[8] else 0
-
-            # 각종 체크율 계산
-            monthly_check_rate = round((checked_tasks / total_tasks) * 100, 2) if total_tasks > 0 else 0
-            daily_check_rate = round((daily_checked_tasks / daily_total_tasks) * 100, 2) if daily_total_tasks > 0 else 0
-            yesterday_check_rate = round((yesterday_checked_tasks / yesterday_total_tasks) * 100, 2) if yesterday_total_tasks > 0 else 0
+                WHERE tc.training_course = %s
+                AND DATE(tc.checked_date) = CURRENT_DATE - INTERVAL '1 day'
+            """, (training_course,))
+            
+            yesterday_result = cursor.fetchone()
+            yesterday_total = yesterday_result[0] if yesterday_result[0] else 0
+            yesterday_checked = yesterday_result[1] if yesterday_result[1] else 0
+            yesterday_rate = round((yesterday_checked / yesterday_total * 100), 2) if yesterday_total > 0 else 0
 
             task_status.append({
                 "training_course": training_course,
                 "dept": dept,
                 "manager_name": manager_name,
-                "daily_check_rate": f"{daily_check_rate}%",
-                "yesterday_check_rate": f"{yesterday_check_rate}%",
-                "monthly_check_rate": f"{monthly_check_rate}%"
+                "daily_check_rate": f"{daily_rate}%",
+                "yesterday_check_rate": f"{yesterday_rate}%",
+                "monthly_check_rate": f"{monthly_rate}%"
             })
 
+        cursor.close()
+        conn.close()
+
         return jsonify({"success": True, "data": task_status}), 200
+
     except Exception as e:
         logging.error("Error retrieving combined task status", exc_info=True)
-        return jsonify({"success": False, "message": "체크율 조회 중 오류가 발생했습니다."}), 500
+        return jsonify({
+            "success": False,
+            "message": "체크율 조회 중 오류가 발생했습니다."
+        }), 500
 
 @bp.route('/admin/previous_day_task_status', methods=['GET'])
 def get_previous_day_task_status():
