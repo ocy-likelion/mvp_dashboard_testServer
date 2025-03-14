@@ -13,7 +13,7 @@ def login():
       - Authentication
     summary: 사용자 로그인을 처리합니다.
     description: |
-      사용자 ID와 비밀번호를 검증하고 로그인을 처리합니다.
+      사용자 이름과 비밀번호를 검증하고 로그인을 처리합니다.
       - 로그인 성공 시 세션에 사용자 정보 저장
       - 실패 시 적절한 에러 메시지 반환
     parameters:
@@ -23,12 +23,12 @@ def login():
         schema:
           type: object
           required:
-            - user_id
+            - username
             - password
           properties:
-            user_id:
+            username:
               type: string
-              description: 사용자 ID
+              description: 사용자 이름
             password:
               type: string
               description: 사용자 비밀번호
@@ -67,18 +67,18 @@ def login():
     """
     try:
         data = request.get_json()
-        user_id = data.get('user_id')
+        username = data.get('username')
         password = data.get('password')
 
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE username = %s AND password = %s', (user_id, password))
+        cursor.execute('SELECT * FROM users WHERE username = %s AND password = %s', (username, password))
         user = cursor.fetchone()
         cursor.close()
         conn.close()
 
         if user:
-            session['user'] = user_id
+            session['user'] = username
             return jsonify({"success": True, "message": "로그인 성공"}), 200
         else:
             return jsonify({"success": False, "message": "아이디 또는 비밀번호가 잘못되었습니다."}), 401
