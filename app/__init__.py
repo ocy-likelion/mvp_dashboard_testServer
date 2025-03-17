@@ -725,4 +725,166 @@ def create_app():
                 "message": "체크율 조회 중 오류가 발생했습니다."
             }), 500
 
+    # 통합 체크율 조회 API
+    @app.route('/admin/task_status_combined', methods=['GET'])
+    def get_combined_task_status():
+        """
+        통합 체크율 조회 API
+        ---
+        tags:
+          - Admin
+        summary: 훈련 과정별 당일, 전날, 월별 누적 체크율을 조회합니다.
+        description: |
+            각 훈련 과정별로 다음 정보를 반환합니다:
+            - 당일 체크율
+            - 전날 체크율
+            - 월별 누적 체크율
+        responses:
+          200:
+            description: 체크율 조회 성공
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                data:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      training_course:
+                        type: string
+                      dept:
+                        type: string
+                      manager_name:
+                        type: string
+                      daily_check_rate:
+                        type: string
+                      yesterday_check_rate:
+                        type: string
+                      monthly_check_rate:
+                        type: string
+        """
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            # 현재 월의 첫날과 마지막 날 계산
+            today = datetime.now().date()
+            yesterday = today - timedelta(days=1)
+            first_date = today.replace(day=1)
+            last_date = today
+
+            cursor.execute('''
+                WITH monthly_checks AS (
+                    SELECT 
+                        tc.training_course,
+                        ti.dept,
+                        ti.manager_name,
+                        COUNT(*) AS total_tasks,
+                        SUM(CASE 
+                            WHEN tc.is_checked THEN 1
+                            WHEN EXISTS (
+                                SELECT 1 FROM unchecked_descriptions ud
+                                WHERE ud.task_name = (
+                                    SELECT task_name FROM task_items WHERE id = tc.task_id
+                                )
+                                AND ud.training_course = tc.training_course
+                                AND DATE(ud.date) = DATE(tc.date)
+                                AND ud.resolved = TRUE
+                            ) THEN 1
+                            ELSE 0 
+                        END) AS checked_tasks,
+                        -- 당일 체크 데이터
+                        SUM(CASE WHEN DATE(tc.date) = CURRENT_DATE THEN 1 ELSE 0 END) AS daily_total_tasks,
+                        SUM(CASE 
+                            WHEN DATE(tc.date) = CURRENT_DATE AND (
+                                tc.is_checked OR EXISTS (
+                                    SELECT 1 FROM unchecked_descriptions ud
+                                    WHERE ud.task_name = (
+                                        SELECT task_name FROM task_items WHERE id = tc.task_id
+                                    )
+                                    AND ud.training_course = tc.training_course
+                                    AND DATE(ud.date) = CURRENT_DATE
+                                    AND ud.resolved = TRUE
+                                )
+                            ) THEN 1 
+                            ELSE 0 
+                        END) AS daily_checked_tasks,
+                        -- 전날 체크 데이터
+                        SUM(CASE WHEN DATE(tc.date) = CURRENT_DATE - INTERVAL '1 day' THEN 1 ELSE 0 END) AS yesterday_total_tasks,
+                        SUM(CASE 
+                            WHEN DATE(tc.date) = CURRENT_DATE - INTERVAL '1 day' AND (
+                                tc.is_checked OR EXISTS (
+                                    SELECT 1 FROM unchecked_descriptions ud
+                                    WHERE ud.task_name = (
+                                        SELECT task_name FROM task_items WHERE id = tc.task_id
+                                    )
+                                    AND ud.training_course = tc.training_course
+                                    AND DATE(ud.date) = CURRENT_DATE - INTERVAL '1 day'
+                                    AND ud.resolved = TRUE
+                                )
+                            ) THEN 1 
+                            ELSE 0 
+                        END) AS yesterday_checked_tasks
+                    FROM task_checklist tc
+                    JOIN training_info ti ON tc.training_course = ti.training_course
+                    WHERE DATE(tc.date) BETWEEN %s AND %s
+                    GROUP BY tc.training_course, ti.dept, ti.manager_name
+                )
+                SELECT 
+                    training_course,
+                    dept,
+                    manager_name,
+                    total_tasks,
+                    checked_tasks,
+                    daily_total_tasks,
+                    daily_checked_tasks,
+                    yesterday_total_tasks,
+                    yesterday_checked_tasks
+                FROM monthly_checks
+            ''', (first_date, last_date))
+
+            results = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+            task_status = []
+            for row in results:
+                training_course = row[0]
+                dept = row[1]
+                manager_name = row[2] if row[2] else "담당자 없음"
+                total_tasks = row[3]
+                checked_tasks = row[4] if row[4] else 0
+                daily_total_tasks = row[5] if row[5] else 0
+                daily_checked_tasks = row[6] if row[6] else 0
+                yesterday_total_tasks = row[7] if row[7] else 0
+                yesterday_checked_tasks = row[8] if row[8] else 0
+
+                # 월별 누적 체크율 계산
+                monthly_check_rate = round((checked_tasks / total_tasks) * 100, 2) if total_tasks > 0 else 0
+                # 당일 체크율 계산
+                daily_check_rate = round((daily_checked_tasks / daily_total_tasks) * 100, 2) if daily_total_tasks > 0 else 0
+                # 전날 체크율 계산
+                yesterday_check_rate = round((yesterday_checked_tasks / yesterday_total_tasks) * 100, 2) if yesterday_total_tasks > 0 else 0
+
+                task_status.append({
+                    "training_course": training_course,
+                    "dept": dept,
+                    "manager_name": manager_name,
+                    "daily_check_rate": f"{daily_check_rate}%",
+                    "yesterday_check_rate": f"{yesterday_check_rate}%",
+                    "monthly_check_rate": f"{monthly_check_rate}%"
+                })
+
+            return jsonify({"success": True, "data": task_status}), 200
+
+        except Exception as e:
+            logging.error("통합 체크율 조회 중 오류 발생", exc_info=True)
+            return jsonify({
+                "success": False, 
+                "message": "체크율 조회 중 오류가 발생했습니다."
+            }), 500
+
     return app 
