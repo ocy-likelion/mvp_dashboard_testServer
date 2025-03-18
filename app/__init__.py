@@ -887,4 +887,125 @@ def create_app():
                 "message": "체크율 조회 중 오류가 발생했습니다."
             }), 500
 
+    # 이슈 목록 조회 API
+    @app.route('/issues', methods=['GET'])
+    def get_issues():
+        """
+        해결되지 않은 이슈 목록 조회 API
+        ---
+        tags:
+          - Issues
+        summary: "해결되지 않은 이슈 목록을 조회합니다."
+        responses:
+          200:
+            description: 이슈 목록 조회 성공
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      training_course:
+                        type: string
+                      created_at:
+                        type: string
+                        format: date-time
+                      issues:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: integer
+                            content:
+                              type: string
+                            date:
+                              type: string
+                              format: date
+                            created_at:
+                              type: string
+                              format: date-time
+                            resolved:
+                              type: boolean
+                            comments:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  id:
+                                    type: integer
+                                  comment:
+                                    type: string
+                                  created_at:
+                                    type: string
+                                    format: date-time
+        """
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            cursor.execute('''
+                WITH grouped_issues AS (
+                    SELECT 
+                        training_course,
+                        MIN(created_at) as first_created_at,
+                        json_agg(
+                            json_build_object(
+                                'id', id,
+                                'content', content,
+                                'date', date,
+                                'created_at', created_at,
+                                'resolved', resolved,
+                                'comments', (
+                                    SELECT json_agg(
+                                        json_build_object(
+                                            'id', ic.id,
+                                            'comment', ic.comment,
+                                            'created_at', ic.created_at
+                                        )
+                                    )
+                                    FROM issue_comments ic 
+                                    WHERE ic.issue_id = issues.id
+                                )
+                            )
+                            ORDER BY created_at DESC
+                        ) AS issues
+                    FROM issues
+                    WHERE resolved = FALSE
+                    GROUP BY training_course
+                )
+                SELECT 
+                    training_course,
+                    first_created_at,
+                    issues
+                FROM grouped_issues
+                ORDER BY first_created_at DESC;
+            ''')
+            
+            issues_grouped = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+            return jsonify({
+                "success": True,
+                "data": [
+                    {
+                        "training_course": row[0],
+                        "created_at": row[1].isoformat() if row[1] else None,
+                        "issues": row[2]
+                    } for row in issues_grouped
+                ]
+            }), 200
+
+        except Exception as e:
+            logging.error("이슈 목록 조회 중 오류 발생", exc_info=True)
+            return jsonify({
+                "success": False,
+                "message": "이슈 목록을 불러오는 중 오류가 발생했습니다."
+            }), 500
+
     return app 
