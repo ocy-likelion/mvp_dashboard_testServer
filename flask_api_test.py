@@ -588,7 +588,7 @@ def save_tasks():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # 현재 날짜 가져오기
+        # 현재 날짜 가져오기 (시간 제외)
         current_date = datetime.now().date()
 
         for update in updates:
@@ -602,12 +602,13 @@ def save_tasks():
                 continue
             task_id = task_item[0]
 
-            # 동일 날짜의 기존 데이터 확인
+            # 동일 날짜의 기존 데이터 확인 (DATE 함수 사용하여 시간 제외)
             cursor.execute("""
-                SELECT id FROM task_checklist 
+                SELECT id 
+                FROM task_checklist 
                 WHERE task_id = %s 
                 AND training_course = %s 
-                AND DATE(checked_date) = %s
+                AND DATE(checked_date)::date = %s::date
             """, (task_id, training_course, current_date))
             
             existing_record = cursor.fetchone()
