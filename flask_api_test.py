@@ -1815,6 +1815,23 @@ def get_combined_task_status():
 
 # ------------------- API 엔드포인트 문서화 끝 -------------------
  
+@app.route('/', methods=['GET'])
+def index():
+    """
+    서버 상태 확인용 루트 경로
+    ---
+    tags:
+      - System
+    responses:
+      200:
+        description: 서버가 정상적으로 실행 중임
+    """
+    return jsonify({
+        "status": "ok",
+        "message": "API 서버가 정상적으로 실행 중입니다.",
+        "version": "1.0.0"
+    }), 200
+
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 10000))  # 기본값을 10000으로 설정
     app.run(host="0.0.0.0", port=port)
