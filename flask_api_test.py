@@ -647,11 +647,11 @@ def save_tasks():
 @app.route('/tasks/update', methods=['PUT'])
 def update_tasks():
     """
-    기존 업무 체크리스트 업데이트 API
+    당일 업무 체크리스트 업데이트 API
     ---
     tags:
       - Tasks
-    summary: "이미 저장된 특정 날짜의 체크리스트를 업데이트합니다."
+    summary: "당일 저장된 체크리스트를 업데이트합니다."
     parameters:
       - in: body
         name: body
@@ -677,29 +677,9 @@ def update_tasks():
             training_course:
               type: string
               example: "데이터 분석 스쿨 4기"
-            date:
-              type: string
-              format: date
-              example: "2025-03-18"
-              description: "업데이트할 체크리스트의 날짜 (기본값: 오늘)"
     responses:
       200:
         description: 체크리스트 업데이트 성공
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              example: true
-            message:
-              type: string
-              example: "체크리스트가 성공적으로 업데이트되었습니다!"
-            updated_count:
-              type: integer
-              example: 5
-              description: "업데이트된 항목 수"
-      400:
-        description: 요청 데이터 오류
       404:
         description: 업데이트할 체크리스트가 존재하지 않음
       500:
@@ -710,18 +690,8 @@ def update_tasks():
         updates = data.get("updates")
         training_course = data.get("training_course")
         
-        # 날짜 파라미터 - 기본값은 오늘
-        target_date_str = data.get("date")
-        if target_date_str:
-            try:
-                target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
-            except ValueError:
-                return jsonify({
-                    "success": False, 
-                    "message": "날짜 형식이 올바르지 않습니다. YYYY-MM-DD 형식을 사용하세요."
-                }), 400
-        else:
-            target_date = datetime.now().date()
+        # 현재 날짜만 사용 (시간 제외)
+        today = datetime.now().date()
 
         if not updates or not training_course:
             return jsonify({
@@ -748,14 +718,14 @@ def update_tasks():
                 
             task_id = task_item[0]
 
-            # 해당 날짜의 기존 데이터 확인
+            # 당일 날짜의 기존 데이터 확인
             cursor.execute("""
                 SELECT id 
                 FROM task_checklist 
                 WHERE task_id = %s 
                 AND training_course = %s 
                 AND DATE(checked_date)::date = %s::date
-            """, (task_id, training_course, target_date))
+            """, (task_id, training_course, today))
             
             existing_record = cursor.fetchone()
 
@@ -778,7 +748,7 @@ def update_tasks():
         if updated_count == 0:
             return jsonify({
                 "success": False,
-                "message": "업데이트할 체크리스트 항목을 찾을 수 없습니다.",
+                "message": "당일 저장된 체크리스트가 없어 업데이트할 수 없습니다.",
                 "not_found_items": not_found_items
             }), 404
 
@@ -789,7 +759,7 @@ def update_tasks():
         }
         
         if not_found_items:
-            response["warning"] = "일부 항목은 기존 데이터가 없어 업데이트되지 않았습니다."
+            response["warning"] = "일부 항목은 당일 저장된 데이터가 없어 업데이트되지 않았습니다."
             response["not_found_items"] = not_found_items
 
         return jsonify(response), 200
@@ -1000,6 +970,9 @@ def add_issue_comment():
         required: true
         schema:
           type: object
+          required:
+            - issue_id
+            - comment
           properties:
             issue_id:
               type: integer
@@ -1013,7 +986,7 @@ def add_issue_comment():
       400:
         description: 요청 데이터 오류
       500:
-        description: 서버 오류
+        description: 서버 오류 발생
     """
     try:
         data = request.json
