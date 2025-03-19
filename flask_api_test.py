@@ -644,6 +644,164 @@ def save_tasks():
         }), 500
 
 
+@app.route('/tasks/update', methods=['PUT'])
+def update_tasks():
+    """
+    기존 업무 체크리스트 업데이트 API
+    ---
+    tags:
+      - Tasks
+    summary: "이미 저장된 특정 날짜의 체크리스트를 업데이트합니다."
+    parameters:
+      - in: body
+        name: body
+        description: 업데이트할 체크리스트 데이터
+        required: true
+        schema:
+          type: object
+          properties:
+            updates:
+              type: array
+              items:
+                type: object
+                required:
+                  - task_name
+                  - is_checked
+                properties:
+                  task_name:
+                    type: string
+                    example: "출석 체크"
+                  is_checked:
+                    type: boolean
+                    example: true
+            training_course:
+              type: string
+              example: "데이터 분석 스쿨 4기"
+            date:
+              type: string
+              format: date
+              example: "2025-03-18"
+              description: "업데이트할 체크리스트의 날짜 (기본값: 오늘)"
+    responses:
+      200:
+        description: 체크리스트 업데이트 성공
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "체크리스트가 성공적으로 업데이트되었습니다!"
+            updated_count:
+              type: integer
+              example: 5
+              description: "업데이트된 항목 수"
+      400:
+        description: 요청 데이터 오류
+      404:
+        description: 업데이트할 체크리스트가 존재하지 않음
+      500:
+        description: 업데이트 실패
+    """
+    try:
+        data = request.json
+        updates = data.get("updates")
+        training_course = data.get("training_course")
+        
+        # 날짜 파라미터 - 기본값은 오늘
+        target_date_str = data.get("date")
+        if target_date_str:
+            try:
+                target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
+            except ValueError:
+                return jsonify({
+                    "success": False, 
+                    "message": "날짜 형식이 올바르지 않습니다. YYYY-MM-DD 형식을 사용하세요."
+                }), 400
+        else:
+            target_date = datetime.now().date()
+
+        if not updates or not training_course:
+            return jsonify({
+                "success": False, 
+                "message": "업데이트할 데이터와 훈련 과정명이 필요합니다."
+            }), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        updated_count = 0
+        not_found_items = []
+
+        for update in updates:
+            task_name = update.get("task_name")
+            is_checked = update.get("is_checked", False)
+
+            # task_id 찾기
+            cursor.execute("SELECT id FROM task_items WHERE task_name = %s", (task_name,))
+            task_item = cursor.fetchone()
+            if not task_item:
+                not_found_items.append(task_name)
+                continue
+                
+            task_id = task_item[0]
+
+            # 해당 날짜의 기존 데이터 확인
+            cursor.execute("""
+                SELECT id 
+                FROM task_checklist 
+                WHERE task_id = %s 
+                AND training_course = %s 
+                AND DATE(checked_date)::date = %s::date
+            """, (task_id, training_course, target_date))
+            
+            existing_record = cursor.fetchone()
+
+            if existing_record:
+                # 기존 데이터가 있으면 업데이트
+                cursor.execute("""
+                    UPDATE task_checklist 
+                    SET is_checked = %s, checked_date = NOW()
+                    WHERE id = %s
+                """, (is_checked, existing_record[0]))
+                updated_count += 1
+            else:
+                # 업데이트할 데이터가 없음
+                not_found_items.append(task_name)
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        if updated_count == 0:
+            return jsonify({
+                "success": False,
+                "message": "업데이트할 체크리스트 항목을 찾을 수 없습니다.",
+                "not_found_items": not_found_items
+            }), 404
+
+        response = {
+            "success": True,
+            "message": "체크리스트가 성공적으로 업데이트되었습니다!",
+            "updated_count": updated_count
+        }
+        
+        if not_found_items:
+            response["warning"] = "일부 항목은 기존 데이터가 없어 업데이트되지 않았습니다."
+            response["not_found_items"] = not_found_items
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        logging.error("체크리스트 업데이트 중 오류 발생", exc_info=True)
+        return jsonify({
+            "success": False,
+            "message": "체크리스트 업데이트 실패"
+        }), 500
+
+
 @app.route('/remarks', methods=['POST'])
 def save_remarks():
     """
@@ -1358,7 +1516,6 @@ def get_unchecked_descriptions():
     except Exception as e:
         logging.error("Error retrieving unchecked descriptions", exc_info=True)
         return jsonify({"success": False, "message": "미체크 항목 목록을 불러오는 중 오류 발생"}), 500
-
 
 
 # ✅ 미체크 항목 저장
