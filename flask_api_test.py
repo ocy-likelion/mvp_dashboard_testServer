@@ -1927,6 +1927,7 @@ def get_combined_task_status():
                 tc.training_course, 
                 ti.dept,
                 ti.manager_name,
+                ti.end_date,
                 COUNT(*) AS total_tasks,
                 SUM(CASE WHEN tc.is_checked THEN 1 ELSE 0 END) AS checked_tasks,
                 -- 당일 체크 데이터
@@ -1938,7 +1939,7 @@ def get_combined_task_status():
             FROM task_checklist tc
             JOIN training_info ti ON tc.training_course = ti.training_course
             WHERE ti.end_date >= CURRENT_DATE - INTERVAL '7 days'  -- 종료된 지 1주일 이내의 과정만 포함
-            GROUP BY tc.training_course, ti.dept, ti.manager_name
+            GROUP BY tc.training_course, ti.dept, ti.manager_name, ti.end_date
             ORDER BY ti.end_date DESC
         ''')
 
@@ -1951,12 +1952,12 @@ def get_combined_task_status():
             training_course = row[0]
             dept = row[1]
             manager_name = row[2] if row[2] else "담당자 없음"
-            total_tasks = row[3]
-            checked_tasks = row[4] if row[4] else 0
-            daily_checked_tasks = row[5] if row[5] else 0
-            daily_total_tasks = row[6] if row[6] else 0
-            yesterday_checked_tasks = row[7] if row[7] else 0
-            yesterday_total_tasks = row[8] if row[8] else 0
+            total_tasks = row[4]
+            checked_tasks = row[5]
+            daily_checked_tasks = row[6]
+            daily_total_tasks = row[7]
+            yesterday_checked_tasks = row[8]
+            yesterday_total_tasks = row[9]
 
             # 전체 체크율 계산
             overall_check_rate = round((checked_tasks / total_tasks) * 100, 2) if total_tasks > 0 else 0
