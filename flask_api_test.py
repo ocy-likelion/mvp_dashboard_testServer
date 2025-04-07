@@ -223,7 +223,7 @@ def get_notices():
         cursor.close()
         conn.close()
         
-        # 모든 공지사항 반환 (전달사항 필터링 없음)
+        # 모든 공지사항 반환 
         return jsonify({
             "success": True,
             "data": notices
@@ -252,6 +252,8 @@ def add_notice():
           required:
             - title
             - content
+            - username
+            - type
           properties:
             title:
               type: string
@@ -259,6 +261,13 @@ def add_notice():
             content:
               type: string
               example: "금일 오후 6시부터 8시까지 시스템 점검이 진행됩니다."
+            username:
+              type: string
+              example: "홍길동"
+            type:
+              type: string
+              example: "공지사항"
+              description: "공지 유형 (예: 공지사항, 전달사항, 알림 등)"
     responses:
       201:
         description: 공지사항 추가 성공
@@ -271,16 +280,18 @@ def add_notice():
         data = request.json
         title = data.get("title")
         content = data.get("content")
+        created_by = data.get("username")  # 프론트엔드에서 전달한 username 사용
+        notice_type = data.get("type", "공지사항")  # 기본값은 "공지사항"으로 설정
 
-        if not title or not content:
-            return jsonify({"success": False, "message": "제목과 내용을 입력하세요."}), 400
+        if not title or not content or not created_by:
+            return jsonify({"success": False, "message": "제목, 내용, 작성자를 모두 입력하세요."}), 400
 
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO notices (title, content, date)
-            VALUES (%s, %s, %s)
-        ''', (title, content, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            INSERT INTO notices (title, content, date, created_by, type)
+            VALUES (%s, %s, %s, %s, %s)
+        ''', (title, content, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), created_by, notice_type))
         
         conn.commit()
         cursor.close()
