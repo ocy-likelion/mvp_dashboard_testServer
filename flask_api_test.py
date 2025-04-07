@@ -92,8 +92,14 @@ def login():
             return jsonify({"success": False, "message": "잘못된 ID 또는 비밀번호입니다."}), 401
 
         session.permanent = True  # 세션을 영구적으로 설정
-        session['user'] = {"id": user[0], "username": username}
-        return jsonify({"success": True, "message": "로그인 성공!"}), 200
+        user_data = {"id": user[0], "username": username}
+        session['user'] = user_data
+
+        return jsonify({
+            "success": True, 
+            "message": "로그인 성공!",
+            "user": user_data  # 사용자 정보 포함
+        }), 200
 
     except Exception as e:
         logging.error("로그인 오류", exc_info=True)
@@ -1019,8 +1025,8 @@ def add_issue_comment():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO issue_comments (issue_id, comment, created_at, created_by) VALUES (%s, %s, NOW(), %s)",
-            (issue_id, comment, created_by)
+            "INSERT INTO issue_comments (issue_id, comment, created_at) VALUES (%s, %s, NOW())",
+            (issue_id, comment)
         )
         conn.commit()
         cursor.close()
@@ -1661,8 +1667,6 @@ def resolve_unchecked_description():
         required: true
         schema:
           type: object
-          required:
-            - unchecked_id
           properties:
             unchecked_id:
               type: integer
