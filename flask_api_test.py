@@ -279,12 +279,13 @@ def add_notice():
 def get_training_courses():
     """
     training_info 테이블에서 training_course 목록을 가져오는 API
+    (현재 진행 중이거나 종료된 지 1주일 이내의 과정만 반환)
     ---
     tags:
       - Training Info
     responses:
       200:
-        description: 훈련과정 목록 반환
+        description: 유효한 훈련과정 목록 반환
         schema:
           type: object
           properties:
@@ -298,18 +299,26 @@ def get_training_courses():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT training_course FROM training_info ORDER BY start_date DESC")
+        
+        # 현재 날짜 기준으로 종료된 지 1주일 이내이거나 아직 진행 중인 과정만 조회
+        cursor.execute('''
+            SELECT training_course 
+            FROM training_info 
+            WHERE end_date >= CURRENT_DATE - INTERVAL '7 days'
+            ORDER BY start_date DESC
+        ''')
+        
         courses = cursor.fetchall()
         cursor.close()
         conn.close()
 
         return jsonify({
             "success": True,
-            "data": [course[0] for course in courses]  # 리스트 형태로 반환
+            "data": [course[0] for course in courses]
         }), 200
     except Exception as e:
         logging.error("Error fetching training courses", exc_info=True)
-        return jsonify({"success": False, "message": "Failed to fetch training courses"}), 500
+        return jsonify({"success": False, "message": "훈련 과정 목록을 불러오는데 실패했습니다."}), 500
 
 
 @app.route('/attendance', methods=['GET'])
