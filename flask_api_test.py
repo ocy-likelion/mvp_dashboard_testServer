@@ -870,26 +870,23 @@ def save_issue():
         description: 서버 오류
     """
     try:
-        # 로그인 확인
-        if 'user' not in session:
-            return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
-
         data = request.json
         issue_text = data.get('issue')
         training_course = data.get('training_course')
         date = data.get('date')
-        created_by = session['user']['username']  # 작성자 정보 가져오기
+        created_by = data.get('username')  # 프론트엔드에서 전달한 username 사용
 
-        if not issue_text or not training_course or not date:
-            return jsonify({"success": False, "message": "이슈, 훈련 과정, 날짜를 모두 입력하세요."}), 400
+        if not issue_text or not training_course or not date or not created_by:
+            return jsonify({"success": False, "message": "이슈, 훈련 과정, 날짜, 작성자를 모두 입력하세요."}), 400
 
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('''
+        
+        query = '''
             INSERT INTO issues (content, date, training_course, created_at, resolved, created_by)
             VALUES (%s, %s, %s, NOW(), FALSE, %s)
-        ''', (issue_text, date, training_course, created_by))
-
+        '''
+        cursor.execute(query, (issue_text, date, training_course, created_by))
         conn.commit()
         cursor.close()
         conn.close()
