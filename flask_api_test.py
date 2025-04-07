@@ -411,6 +411,162 @@ def add_notice():
         return jsonify({"success": False, "message": "공지사항 추가 실패"}), 500
 
 
+@app.route('/notices/<int:notice_id>', methods=['PUT'])
+def update_notice(notice_id):
+    """
+    공지사항 수정 API
+    ---
+    tags:
+      - Notices
+    summary: 공지사항을 수정합니다.
+    parameters:
+      - name: notice_id
+        in: path
+        type: integer
+        required: true
+        description: 수정할 공지사항 ID
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          properties:
+            title:
+              type: string
+              example: "수정된 공지사항 제목"
+            content:
+              type: string
+              example: "수정된 공지사항 내용입니다."
+            type:
+              type: string
+              example: "공지사항"
+            username:
+              type: string
+              example: "홍길동"
+    responses:
+      200:
+        description: 공지사항 수정 성공
+      400:
+        description: 필수 데이터 누락
+      404:
+        description: 공지사항을 찾을 수 없음
+      500:
+        description: 서버 오류 발생
+    """
+    try:
+        data = request.json
+        title = data.get('title')
+        content = data.get('content')
+        notice_type = data.get('type')
+        username = data.get('username')  # 수정자 정보
+
+        if not title or not content or not username:
+            return jsonify({"success": False, "message": "제목, 내용, 사용자명을 모두 입력하세요."}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 먼저 해당 공지사항이 존재하는지 확인
+        cursor.execute("SELECT id FROM notices WHERE id = %s", (notice_id,))
+        notice = cursor.fetchone()
+        
+        if not notice:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "해당 공지사항을 찾을 수 없습니다."}), 404
+        
+        # 공지사항 업데이트
+        update_fields = ["title = %s", "content = %s", "date = NOW()"]
+        params = [title, content]
+        
+        if notice_type:
+            update_fields.append("type = %s")
+            params.append(notice_type)
+        
+        # 수정자 정보 추가
+        update_fields.append("modified_by = %s")
+        params.append(username)
+        
+        params.append(notice_id)  # WHERE 조건용
+        
+        query = f"UPDATE notices SET {', '.join(update_fields)} WHERE id = %s"
+        cursor.execute(query, tuple(params))
+        
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({"success": False, "message": "공지사항 수정에 실패했습니다."}), 500
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "공지사항이 성공적으로 수정되었습니다."}), 200
+        
+    except Exception as e:
+        logging.error("공지사항 수정 오류", exc_info=True)
+        return jsonify({"success": False, "message": "공지사항 수정 중 오류가 발생했습니다."}), 500
+
+
+@app.route('/notices/<int:notice_id>', methods=['DELETE'])
+def delete_notice(notice_id):
+    """
+    공지사항 삭제 API
+    ---
+    tags:
+      - Notices
+    summary: 공지사항을 삭제합니다.
+    parameters:
+      - name: notice_id
+        in: path
+        type: integer
+        required: true
+        description: 삭제할 공지사항 ID
+    responses:
+      200:
+        description: 공지사항 삭제 성공
+      404:
+        description: 공지사항을 찾을 수 없음
+      500:
+        description: 서버 오류 발생
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 먼저 해당 공지사항이 존재하는지 확인
+        cursor.execute("SELECT id FROM notices WHERE id = %s", (notice_id,))
+        notice = cursor.fetchone()
+        
+        if not notice:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "해당 공지사항을 찾을 수 없습니다."}), 404
+        
+        # 관련된 읽음 표시 기록 삭제 (notice_reads 테이블이 있는 경우)
+        try:
+            cursor.execute("DELETE FROM notice_reads WHERE notice_id = %s", (notice_id,))
+        except:
+            # notice_reads 테이블이 없으면 무시
+            pass
+        
+        # 공지사항 삭제
+        cursor.execute("DELETE FROM notices WHERE id = %s", (notice_id,))
+        
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({"success": False, "message": "공지사항 삭제에 실패했습니다."}), 500
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "공지사항이 성공적으로 삭제되었습니다."}), 200
+        
+    except Exception as e:
+        logging.error("공지사항 삭제 오류", exc_info=True)
+        return jsonify({"success": False, "message": "공지사항 삭제 중 오류가 발생했습니다."}), 500
+
+
 # 과정명 선택할 수 있는 드롭다운 설정
 @app.route('/training_courses', methods=['GET'])
 def get_training_courses():
