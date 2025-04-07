@@ -1937,7 +1937,9 @@ def get_combined_task_status():
                 COUNT(CASE WHEN DATE(tc.checked_date) = CURRENT_DATE - INTERVAL '1 day' THEN 1 ELSE NULL END) AS yesterday_total_tasks
             FROM task_checklist tc
             JOIN training_info ti ON tc.training_course = ti.training_course
+            WHERE ti.end_date >= CURRENT_DATE - INTERVAL '7 days'  -- 종료된 지 1주일 이내의 과정만 포함
             GROUP BY tc.training_course, ti.dept, ti.manager_name
+            ORDER BY ti.end_date DESC
         ''')
 
         results = cursor.fetchall()
@@ -1975,7 +1977,7 @@ def get_combined_task_status():
         return jsonify({"success": True, "data": task_status}), 200
     except Exception as e:
         logging.error("Error retrieving combined task status", exc_info=True)
-        return jsonify({"success": False, "message": "Failed to retrieve task status"}), 500
+        return jsonify({"success": False, "message": "체크율 정보를 불러오는데 실패했습니다."}), 500
 
 
 
