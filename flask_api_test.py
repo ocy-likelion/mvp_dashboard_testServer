@@ -947,14 +947,14 @@ def get_issues():
                 'content', i.content, 
                 'date', i.date, 
                 'created_at', i.created_at,
-                'created_by', i.created_by,  # 작성자 정보 추가
+                'created_by', COALESCE(i.created_by, '작성자 없음'),  # NULL 처리 추가
                 'resolved', i.resolved,
                 'comments', (
                     SELECT json_agg(json_build_object(
                         'id', ic.id, 
                         'comment', ic.comment,
                         'created_at', ic.created_at,
-                        'created_by', ic.created_by  # 댓글 작성자 정보 추가
+                        'created_by', COALESCE(ic.created_by, '작성자 없음')  # NULL 처리 추가
                     )) FROM issue_comments ic WHERE ic.issue_id = i.id
                 )
             )) AS issues
