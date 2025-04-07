@@ -988,51 +988,20 @@ def get_issues():
 # 이슈에 대한 댓글 달기
 @app.route('/issues/comments', methods=['POST'])
 def add_issue_comment():
-    """
-    이슈사항에 대한 댓글 저장 API
-    ---
-    tags:
-      - Issues
-    parameters:
-      - in: body
-        name: body
-        required: true
-        schema:
-          type: object
-          required:
-            - issue_id
-            - comment
-          properties:
-            issue_id:
-              type: integer
-              example: 1
-            comment:
-              type: string
-              example: "이슈에 대한 답변입니다."
-    responses:
-      201:
-        description: 댓글 저장 성공
-      400:
-        description: 요청 데이터 오류
-      500:
-        description: 서버 오류 발생
-    """
     try:
-        if 'user' not in session:
-            return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
-
         data = request.json
         issue_id = data.get('issue_id')
         comment = data.get('comment')
+        created_by = data.get('username')  # 프론트엔드에서 전달받은 username 사용
 
-        if not issue_id or not comment:
-            return jsonify({"success": False, "message": "이슈 ID와 댓글 내용을 입력하세요."}), 400
+        if not issue_id or not comment or not created_by:
+            return jsonify({"success": False, "message": "이슈 ID, 댓글 내용, 작성자 정보를 모두 입력하세요."}), 400
 
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO issue_comments (issue_id, comment, created_at) VALUES (%s, %s, NOW())",
-            (issue_id, comment)
+            "INSERT INTO issue_comments (issue_id, comment, created_at, created_by) VALUES (%s, %s, NOW(), %s)",
+            (issue_id, comment, created_by)
         )
         conn.commit()
         cursor.close()
