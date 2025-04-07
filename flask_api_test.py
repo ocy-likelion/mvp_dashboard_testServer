@@ -1015,40 +1015,6 @@ def add_issue_comment():
 # 이슈에 대한 댓글 조회
 @app.route('/issues/comments', methods=['GET'])
 def get_issue_comments():
-    """
-    이슈사항의 댓글 조회 API
-    ---
-    tags:
-      - Issues
-    summary: "특정 이슈에 대한 댓글 목록을 조회합니다."
-    parameters:
-      - name: issue_id
-        in: query
-        type: integer
-        required: true
-        description: "조회할 이슈 ID"
-    responses:
-      200:
-        description: 이슈사항의 댓글 목록 반환
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-            data:
-              type: array
-              items:
-                type: object
-                properties:
-                  id:
-                    type: integer
-                  comment:
-                    type: string
-                  created_at:
-                    type: string
-      500:
-        description: 댓글 조회 실패
-    """
     try:
         issue_id = request.args.get('issue_id')
 
@@ -1058,7 +1024,7 @@ def get_issue_comments():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, comment, created_at FROM issue_comments WHERE issue_id = %s ORDER BY created_at ASC",
+            "SELECT id, comment, created_at, created_by FROM issue_comments WHERE issue_id = %s ORDER BY created_at ASC",
             (issue_id,)
         )
         comments = cursor.fetchall()
@@ -1067,7 +1033,14 @@ def get_issue_comments():
 
         return jsonify({
             "success": True,
-            "data": [{"id": row[0], "comment": row[1], "created_at": row[2]} for row in comments]
+            "data": [
+                {
+                    "id": row[0], 
+                    "comment": row[1], 
+                    "created_at": row[2],
+                    "created_by": row[3] if row[3] else "작성자 없음"  # created_by가 NULL인 경우 처리
+                } for row in comments
+            ]
         }), 200
     except Exception as e:
         logging.error("Error retrieving issue comments", exc_info=True)
