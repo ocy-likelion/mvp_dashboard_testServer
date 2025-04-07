@@ -594,6 +594,8 @@ def save_tasks():
                     type: boolean
             training_course:
               type: string
+            username:
+              type: string
     responses:
       201:
         description: 업무 체크리스트 저장/업데이트 성공
@@ -606,9 +608,10 @@ def save_tasks():
         data = request.json
         updates = data.get("updates")
         training_course = data.get("training_course")
+        username = data.get("username")  # 프론트엔드에서 전달받은 username
 
-        if not updates or not training_course:
-            return jsonify({"success": False, "message": "데이터가 제공되지 않았습니다."}), 400
+        if not updates or not training_course or not username:
+            return jsonify({"success": False, "message": "업데이트 데이터, 훈련 과정명, 사용자명이 모두 필요합니다."}), 400
 
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -642,15 +645,15 @@ def save_tasks():
                 # 기존 데이터가 있으면 업데이트
                 cursor.execute("""
                     UPDATE task_checklist 
-                    SET is_checked = %s, checked_date = NOW()
+                    SET is_checked = %s, checked_date = NOW(), username = %s
                     WHERE id = %s
-                """, (is_checked, existing_record[0]))
+                """, (is_checked, username, existing_record[0]))
             else:
                 # 기존 데이터가 없으면 새로 삽입
                 cursor.execute("""
-                    INSERT INTO task_checklist (task_id, training_course, is_checked, checked_date)
-                    VALUES (%s, %s, %s, NOW())
-                """, (task_id, training_course, is_checked))
+                    INSERT INTO task_checklist (task_id, training_course, is_checked, checked_date, username)
+                    VALUES (%s, %s, %s, NOW(), %s)
+                """, (task_id, training_course, is_checked, username))
 
         conn.commit()
         cursor.close()
