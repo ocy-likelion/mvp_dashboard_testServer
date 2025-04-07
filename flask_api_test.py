@@ -170,49 +170,67 @@ def admin():
 @app.route('/notices', methods=['GET'])
 def get_notices():
     """
-    공지사항 및 전달사항 조회 API
+    공지사항 조회 API
     ---
     tags:
       - Notices
     responses:
       200:
-        description: 공지사항 및 전달사항 데이터를 포함한 응답
+        description: 모든 공지사항 데이터를 포함한 응답
         schema:
           type: object
           properties:
             success:
               type: boolean
             data:
-              type: object
-              properties:
-                notices:
-                  type: array
-                  description: 모든 공지사항 데이터
-                remarks:
-                  type: array
-                  description: "전달사항 타입인 공지 데이터"
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  type:
+                    type: string
+                  title:
+                    type: string
+                  content:
+                    type: string
+                  date:
+                    type: string
+                  created_by:
+                    type: string
       500:
         description: 공지사항을 불러오는 데 실패함
     """
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        # 공지사항과 전달사항을 모두 불러옴
-        cursor.execute('SELECT * FROM notices ORDER BY date DESC')
-        notices = cursor.fetchall()
+        
+        # 모든 필요한 컬럼을 명시적으로 지정
+        cursor.execute('SELECT id, type, title, content, date, COALESCE(created_by, \'작성자 없음\') as created_by FROM notices ORDER BY date DESC')
+        
+        # 결과를 딕셔너리 형태로 변환
+        columns = ['id', 'type', 'title', 'content', 'date', 'created_by']
+        notice_rows = cursor.fetchall()
+        notices = []
+        
+        for row in notice_rows:
+            notice_dict = {}
+            for i, column in enumerate(columns):
+                notice_dict[column] = row[i]
+            notices.append(notice_dict)
+        
         cursor.close()
         conn.close()
-        # '전달사항'만 필터링하여 별도로 제공 (notice[1]가 타입으로 가정)
+        
+        # 모든 공지사항 반환 (전달사항 필터링 없음)
         return jsonify({
             "success": True,
-            "data": {
-                "notices": notices,
-                "remarks": [notice for notice in notices if notice[1] == '전달사항']
-            }
+            "data": notices
         }), 200
     except Exception as e:
         logging.error("Error retrieving notices", exc_info=True)
-        return jsonify({"success": False, "message": "Failed to retrieve notices"}), 500
+        return jsonify({"success": False, "message": "공지사항을 불러오는데 실패했습니다."}), 500
 
 
 @app.route('/notices', methods=['POST'])
