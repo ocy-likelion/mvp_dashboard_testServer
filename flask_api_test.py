@@ -994,8 +994,19 @@ def add_issue_comment():
         comment = data.get('comment')
         created_by = data.get('username')  # 프론트엔드에서 전달받은 username 사용
 
+        # 로깅 추가
+        logging.error(f"Received data: {data}")
+
         if not issue_id or not comment or not created_by:
-            return jsonify({"success": False, "message": "이슈 ID, 댓글 내용, 작성자 정보를 모두 입력하세요."}), 400
+            return jsonify({
+                "success": False, 
+                "message": "이슈 ID, 댓글 내용, 작성자 정보를 모두 입력하세요.",
+                "received": {
+                    "issue_id": issue_id,
+                    "comment": comment,
+                    "username": created_by
+                }
+            }), 400
 
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -1703,7 +1714,14 @@ def get_unchecked_comments():
 
         return jsonify({
             "success": True,
-            "data": [{"id": row[0], "comment": row[1], "created_at": row[2]} for row in comments]
+            "data": [
+                {
+                    "id": row[0], 
+                    "comment": row[1], 
+                    "created_at": row[2],
+                    "created_by": row[3] if row[3] else "작성자 없음"  # created_by가 NULL인 경우 처리
+                } for row in comments
+            ]
         }), 200
     except Exception as e:
         logging.error("Error retrieving unchecked comments", exc_info=True)
