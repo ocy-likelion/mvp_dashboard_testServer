@@ -6,13 +6,22 @@ from flasgger import Swagger, swag_from
 from dotenv import load_dotenv
 import os, psycopg2
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta  # timedelta 추가
 
 # 로깅 설정
 logging.basicConfig(level=logging.ERROR)
 
 app = Flask(__name__, template_folder='templates')
 app.secret_key = 'your-secret-key'  # 실제 운영 환경에서는 안전한 난수를 사용하세요.
+
+# 세션 설정 강화
+app.config.update(
+    SESSION_COOKIE_SECURE=True,      # HTTPS에서만 쿠키 전송
+    SESSION_COOKIE_HTTPONLY=True,    # JavaScript에서 쿠키 접근 방지
+    SESSION_COOKIE_SAMESITE='Lax',   # CSRF 공격 방지
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=12)  # 세션 유효 시간 12시간으로 설정
+)
+
 CORS(app, supports_credentials=True)  # ✅ CORS 설정 강화 (세션 쿠키 허용)
 
 app.config['SWAGGER'] = {
@@ -82,6 +91,7 @@ def login():
         if not user or user[1] != password:
             return jsonify({"success": False, "message": "잘못된 ID 또는 비밀번호입니다."}), 401
 
+        session.permanent = True  # 세션을 영구적으로 설정
         session['user'] = {"id": user[0], "username": username}
         return jsonify({"success": True, "message": "로그인 성공!"}), 200
 
@@ -854,10 +864,15 @@ def save_issue():
         description: 서버 오류
     """
     try:
+        # 로그인 확인
+        if 'user' not in session:
+            return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
+
         data = request.json
         issue_text = data.get('issue')
         training_course = data.get('training_course')
         date = data.get('date')
+        created_by = session['user']['username']  # 작성자 정보 가져오기
 
         if not issue_text or not training_course or not date:
             return jsonify({"success": False, "message": "이슈, 훈련 과정, 날짜를 모두 입력하세요."}), 400
@@ -865,9 +880,9 @@ def save_issue():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO issues (content, date, training_course, created_at, resolved)
-            VALUES (%s, %s, %s, NOW(), FALSE)
-        ''', (issue_text, date, training_course))
+            INSERT INTO issues (content, date, training_course, created_at, resolved, created_by)
+            VALUES (%s, %s, %s, NOW(), FALSE, %s)
+        ''', (issue_text, date, training_course, created_by))
 
         conn.commit()
         cursor.close()
@@ -926,12 +941,14 @@ def get_issues():
                 'content', i.content, 
                 'date', i.date, 
                 'created_at', i.created_at,
+                'created_by', i.created_by,  # 작성자 정보 추가
                 'resolved', i.resolved,
                 'comments', (
                     SELECT json_agg(json_build_object(
                         'id', ic.id, 
-                        'comment', ic.comment, 
-                        'created_at', ic.created_at
+                        'comment', ic.comment,
+                        'created_at', ic.created_at,
+                        'created_by', ic.created_by  # 댓글 작성자 정보 추가
                     )) FROM issue_comments ic WHERE ic.issue_id = i.id
                 )
             )) AS issues
@@ -989,6 +1006,9 @@ def add_issue_comment():
         description: 서버 오류 발생
     """
     try:
+        if 'user' not in session:
+            return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
+
         data = request.json
         issue_id = data.get('issue_id')
         comment = data.get('comment')
@@ -999,8 +1019,8 @@ def add_issue_comment():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO issue_comments (issue_id, comment, created_at) VALUES (%s, %s, NOW())",
-            (issue_id, comment)
+            "INSERT INTO issue_comments (issue_id, comment, created_at, created_by) VALUES (%s, %s, NOW(), %s)",
+            (issue_id, comment, created_by)
         )
         conn.commit()
         cursor.close()
