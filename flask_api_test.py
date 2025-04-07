@@ -947,14 +947,14 @@ def get_issues():
                 'content', i.content, 
                 'date', i.date, 
                 'created_at', i.created_at,
-                'created_by', COALESCE(i.created_by, '작성자 없음'),  # NULL 처리 추가
+                'created_by', COALESCE(i.created_by, '작성자 없음'),
                 'resolved', i.resolved,
                 'comments', (
                     SELECT json_agg(json_build_object(
                         'id', ic.id, 
                         'comment', ic.comment,
                         'created_at', ic.created_at,
-                        'created_by', COALESCE(ic.created_by, '작성자 없음')  # NULL 처리 추가
+                        'created_by', COALESCE(ic.created_by, '작성자 없음')
                     )) FROM issue_comments ic WHERE ic.issue_id = i.id
                 )
             )) AS issues
@@ -1759,7 +1759,7 @@ def get_unchecked_comments():
         }), 200
     except Exception as e:
         logging.error("Error retrieving unchecked comments", exc_info=True)
-        return jsonify({"success": False, "message": "미체크 항목 댓글 조회 실패"}), 500
+        return jsonify({"success": False, "message": "댓글 조회 실패"}), 500
 
 
 # 당일 체크율 계산
