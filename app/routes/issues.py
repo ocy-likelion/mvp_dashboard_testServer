@@ -320,51 +320,51 @@ def download_issues():
         return jsonify({"success": False, "message": "이슈 다운로드 실패"}), 500
 
 
-@issues_bp.route('/remarks', methods=['POST'])
-def save_remarks():
-    """
-    전달사항 저장 API
-    ---
-    tags:
-      - Remarks
-    parameters:
-      - in: body
-        name: body
-        description: 저장할 전달사항 데이터
-        required: true
-        schema:
-          type: object
-          required:
-            - remarks
-          properties:
-            remarks:
-              type: string
-              example: "전달사항 내용 예시"
-    responses:
-      201:
-        description: 전달사항 저장 성공
-      400:
-        description: 전달사항 데이터 누락
-      500:
-        description: 전달사항 저장 실패
-    """
-    try:
-        data = request.json
-        remarks = data.get('remarks')
-        if not remarks:
-            return jsonify({"success": False, "message": "Remarks are required"}), 400
+# @issues_bp.route('/remarks', methods=['POST'])
+# def save_remarks():
+#     """
+#     전달사항 저장 API
+#     ---
+#     tags:
+#       - Remarks
+#     parameters:
+#       - in: body
+#         name: body
+#         description: 저장할 전달사항 데이터
+#         required: true
+#         schema:
+#           type: object
+#           required:
+#             - remarks
+#           properties:
+#             remarks:
+#               type: string
+#               example: "전달사항 내용 예시"
+#     responses:
+#       201:
+#         description: 전달사항 저장 성공
+#       400:
+#         description: 전달사항 데이터 누락
+#       500:
+#         description: 전달사항 저장 실패
+#     """
+#     try:
+#         data = request.json
+#         remarks = data.get('remarks')
+#         if not remarks:
+#             return jsonify({"success": False, "message": "Remarks are required"}), 400
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO notices (type, title, content, date)
-            VALUES (%s, %s, %s, %s)
-        ''', ("전달사항", "전달사항 제목", remarks, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-        conn.commit()
-        cursor.close()
-        conn.close()
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+#         cursor.execute('''
+#             INSERT INTO notices (type, title, content, date)
+#             VALUES (%s, %s, %s, %s)
+#         ''', ("전달사항", "전달사항 제목", remarks, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+#         conn.commit()
+#         cursor.close()
+#         conn.close()
 
-        return jsonify({"success": True, "message": "Remarks saved!"}), 201
-    except Exception as e:
-        logging.error("Error saving remarks", exc_info=True)
-        return jsonify({"success": False, "message": "Failed to save remarks"}), 500
+#         return jsonify({"success": True, "message": "Remarks saved!"}), 201
+#     except Exception as e:
+#         logging.error("Error saving remarks", exc_info=True)
+#         return jsonify({"success": False, "message": "Failed to save remarks"}), 500
