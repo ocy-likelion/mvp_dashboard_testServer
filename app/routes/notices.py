@@ -23,7 +23,7 @@ def get_notices():
         cursor = conn.cursor()
         
         # 모든 필요한 컬럼을 명시적으로 지정
-        cursor.execute('SELECT id, type, title, content, date, COALESCE(created_by, \'작성자 없음\') as created_by FROM notices ORDER BY date DESC')
+        cursor.execute("SELECT * FROM notices WHERE is_deleted = FALSE ORDER BY created_at DESC")
         
         # 결과를 딕셔너리 형태로 변환
         columns = ['id', 'type', 'title', 'content', 'date', 'created_by']
@@ -232,7 +232,7 @@ def delete_notice(notice_id):
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # 먼저 해당 공지사항이 존재하는지 확인
+        # 공지사항 존재 확인
         cursor.execute("SELECT id FROM notices WHERE id = %s", (notice_id,))
         notice = cursor.fetchone()
         
@@ -241,15 +241,8 @@ def delete_notice(notice_id):
             conn.close()
             return jsonify({"success": False, "message": "해당 공지사항을 찾을 수 없습니다."}), 404
         
-        # 관련된 읽음 표시 기록 삭제 (notice_reads 테이블이 있는 경우)
-        try:
-            cursor.execute("DELETE FROM notice_reads WHERE notice_id = %s", (notice_id,))
-        except:
-            # notice_reads 테이블이 없으면 무시
-            pass
-        
-        # 공지사항 삭제
-        cursor.execute("DELETE FROM notices WHERE id = %s", (notice_id,))
+        # 실제 삭제 대신 is_deleted 필드 업데이트
+        cursor.execute("UPDATE notices SET is_deleted = TRUE WHERE id = %s", (notice_id,))
         
         if cursor.rowcount == 0:
             conn.close()
