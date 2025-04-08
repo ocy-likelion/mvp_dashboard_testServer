@@ -22,8 +22,8 @@ def get_notices():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # 모든 필요한 컬럼을 명시적으로 지정
-        cursor.execute("SELECT * FROM notices WHERE is_deleted = FALSE ORDER BY created_at DESC")
+        # 'created_at' 대신 'date' 컬럼 사용
+        cursor.execute("SELECT * FROM notices WHERE is_deleted = FALSE ORDER BY date DESC")
         
         # 결과를 딕셔너리 형태로 변환
         columns = ['id', 'type', 'title', 'content', 'date', 'created_by']
@@ -39,7 +39,6 @@ def get_notices():
         cursor.close()
         conn.close()
         
-        # 모든 공지사항 반환 (전달사항 필터링 없음)
         return jsonify({
             "success": True,
             "data": notices
