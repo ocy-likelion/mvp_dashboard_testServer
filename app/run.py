@@ -1,5 +1,8 @@
 from app import create_app
-from app.config import PORT
+import os
+
+# 직접 환경 변수에서 PORT 값을 읽습니다
+PORT = int(os.getenv("PORT", 10000))
 
 app = create_app()
 
