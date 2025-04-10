@@ -59,16 +59,10 @@ def add_issue():
         cursor.close()
         conn.close()
 
-        # Slack 알림 전송
-        try:
-            notifier = SlackNotifier()
-            notification_sent = notifier.notify_new_issue(issue, created_by, training_course)
-            if notification_sent:
-                logger.info("Slack 알림 전송 성공")
-            else:
-                logger.error("Slack 알림 전송 실패")
-        except Exception as e:
-            logger.error(f"Slack 알림 전송 중 오류: {str(e)}")
+        # 이슈 등록 알림
+        notifier = SlackNotifier()
+        notification_message = f"새로운 이슈가 등록되었습니다!\n과정명: {training_course}\n이슈: {issue}"
+        notifier.send_notification(notification_message, channel='issue')
 
         return jsonify({"success": True, "message": "이슈가 등록되었습니다.", "id": issue_id}), 201
     except Exception as e:
@@ -168,20 +162,10 @@ def add_comment():
         cursor.close()
         conn.close()
 
-        # Slack 알림 전송
-        try:
-            notifier = SlackNotifier()
-            notification_sent = notifier.notify_new_comment(
-                issue_title=issue_info[0],  # content 컬럼의 값
-                author=created_by,
-                training_course=issue_info[1]
-            )
-            if notification_sent:
-                logger.info("Slack 알림 전송 성공")
-            else:
-                logger.error("Slack 알림 전송 실패")
-        except Exception as e:
-            logger.error(f"Slack 알림 전송 중 오류: {str(e)}")
+        # 댓글 등록 알림
+        notifier = SlackNotifier()
+        notification_message = f"이슈에 새로운 댓글이 등록되었습니다!\n과정명: {issue_info[1]}\n댓글: {comment}"
+        notifier.send_notification(notification_message, channel='comment')
 
         return jsonify({"success": True, "message": "댓글이 등록되었습니다."}), 201
     except Exception as e:
