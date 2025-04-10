@@ -2,8 +2,10 @@ from flask import Blueprint, request, jsonify
 from datetime import datetime
 import logging
 from app.models.db import get_db_connection
+from app.utils.notifications import SlackNotifier
 
 notices_bp = Blueprint('notices', __name__)
+slack_notifier = SlackNotifier()
 
 @notices_bp.route('/notices', methods=['GET'])
 def get_notices():
@@ -90,8 +92,8 @@ def add_notice():
         data = request.json
         title = data.get("title")
         content = data.get("content")
-        created_by = data.get("username")  # 프론트엔드에서 전달한 username 사용
-        notice_type = data.get("type", "공지사항")  # 기본값은 "공지사항"으로 설정
+        created_by = data.get("username")
+        notice_type = data.get("type", "공지사항")
 
         if not title or not content or not created_by:
             return jsonify({"success": False, "message": "제목, 내용, 작성자를 모두 입력하세요."}), 400
@@ -116,6 +118,9 @@ def add_notice():
         conn.commit()
         cursor.close()
         conn.close()
+
+        # Slack 알림 전송
+        slack_notifier.notify_new_notice(title, created_by)
 
         return jsonify({"success": True, "message": "공지사항이 추가되었습니다."}), 201
     except Exception as e:
