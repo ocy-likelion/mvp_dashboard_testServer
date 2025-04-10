@@ -43,7 +43,7 @@ class SlackNotifier:
                 "channel": channel_id
             }
             
-            response = requests.post(webhook_url, json=payload)
+            response = requests.post(webhook_url, json={"text": message})
             if response.status_code == 200:
                 logging.info(f"Slack 알림 전송 성공 (채널: {channel_type}, 채널ID: {channel_id})")
                 return True
