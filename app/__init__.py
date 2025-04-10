@@ -1,9 +1,14 @@
+from dotenv import load_dotenv
+import os
 import logging
 import sys
 from flask import Flask
 from flask_cors import CORS
 from flasgger import Swagger
 from datetime import timedelta
+
+# 환경 변수 로딩을 가장 먼저 수행
+load_dotenv()
 
 # 전역 로깅 설정
 logging.basicConfig(

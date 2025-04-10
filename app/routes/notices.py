@@ -8,12 +8,54 @@ import os
 notices_bp = Blueprint('notices', __name__)
 logger = logging.getLogger(__name__)
 
-# SlackNotifier 인스턴스 생성 시 로깅 추가
-try:
-    slack_notifier = SlackNotifier()
-    logger.info("SlackNotifier 인스턴스 생성 성공")
-except Exception as e:
-    logger.error(f"SlackNotifier 인스턴스 생성 실패: {str(e)}")
+# SlackNotifier 인스턴스를 전역 변수로 생성하지 않음
+@notices_bp.route('/notices', methods=['POST'])
+def add_notice():
+    try:
+        data = request.json
+        title = data.get("title")
+        content = data.get("content")
+        created_by = data.get("username")
+        notice_type = data.get("type", "공지사항")
+
+        if not title or not content or not created_by:
+            return jsonify({"success": False, "message": "제목, 내용, 작성자를 모두 입력하세요."}), 400
+
+        # 허용된 사용자 확인
+        allowed_users = ["김은지", "장지연"]
+        if created_by not in allowed_users:
+            return jsonify({
+                "success": False, 
+                "message": "공지사항 작성 권한이 없습니다."
+            }), 403
+
+        # DB 작업
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO notices (title, content, date, created_by, type)
+            VALUES (%s, %s, %s, %s, %s)
+        ''', (title, content, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), created_by, notice_type))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        # Slack 알림 전송 (여기서 인스턴스 생성)
+        try:
+            notifier = SlackNotifier()
+            notification_sent = notifier.notify_new_notice(title, created_by)
+            if notification_sent:
+                logger.info("Slack 알림 전송 성공")
+            else:
+                logger.error("Slack 알림 전송 실패")
+        except Exception as e:
+            logger.error(f"Slack 알림 전송 중 오류: {str(e)}")
+
+        return jsonify({"success": True, "message": "공지사항이 추가되었습니다."}), 201
+    except Exception as e:
+        logger.error(f"공지사항 추가 중 오류: {str(e)}")
+        return jsonify({"success": False, "message": "공지사항 추가 실패"}), 500
 
 @notices_bp.route('/notices', methods=['GET'])
 def get_notices():
@@ -56,106 +98,6 @@ def get_notices():
     except Exception as e:
         logging.error("Error retrieving notices", exc_info=True)
         return jsonify({"success": False, "message": "공지사항을 불러오는데 실패했습니다."}), 500
-
-@notices_bp.route('/notices', methods=['POST'])
-def add_notice():
-    """
-    공지사항 추가 API
-    ---
-    tags:
-      - Notices
-    parameters:
-      - in: body
-        name: body
-        required: true
-        schema:
-          type: object
-          required:
-            - title
-            - content
-            - username
-            - type
-          properties:
-            title:
-              type: string
-              example: "시스템 점검 안내"
-            content:
-              type: string
-              example: "금일 오후 6시부터 8시까지 시스템 점검이 진행됩니다."
-            username:
-              type: string
-              example: "홍길동"
-            type:
-              type: string
-              example: "공지사항"
-    responses:
-      201:
-        description: 공지사항 추가 성공
-      400:
-        description: 필수 데이터 누락
-      500:
-        description: 서버 오류 발생
-    """
-    try:
-        # 환경 변수 확인
-        print(f"SLACK_WEBHOOK_URL: {os.getenv('SLACK_WEBHOOK_URL')}")
-        print(f"SLACK_CHANNEL: {os.getenv('SLACK_CHANNEL')}")
-        
-        data = request.json
-        print(f"받은 데이터: {data}")  # 전체 요청 데이터 출력
-        
-        title = data.get("title")
-        content = data.get("content")
-        created_by = data.get("username")
-        notice_type = data.get("type", "공지사항")
-
-        # 데이터 로깅
-        print(f"받은 데이터: title={title}, created_by={created_by}")  # print문 추가
-        logger.info(f"받은 데이터: title={title}, created_by={created_by}")
-
-        if not title or not content or not created_by:
-            return jsonify({"success": False, "message": "제목, 내용, 작성자를 모두 입력하세요."}), 400
-        
-        # 허용된 사용자 목록
-        allowed_users = ["김은지", "장지연"]  # 이 두 사용자만 공지사항을 작성할 수 있음
-        
-        # 현재 사용자가 허용된 사용자인지 확인
-        if created_by not in allowed_users:
-            return jsonify({
-                "success": False, 
-                "message": "공지사항 작성 권한이 없습니다. 관리자에게 문의하세요."
-            }), 403
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # DB 작업 전 로깅
-        print("데이터베이스 작업 시작")  # print문 추가
-        logger.info("데이터베이스 작업 시작")
-
-        cursor.execute('''
-            INSERT INTO notices (title, content, date, created_by, type)
-            VALUES (%s, %s, %s, %s, %s)
-        ''', (title, content, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), created_by, notice_type))
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        # 여기에 로깅 추가
-        logger.info(f"공지사항 등록 시도 - 제목: {title}, 작성자: {created_by}")
-        
-        # Slack 알림 전송 시도 전 상태 확인
-        print("Slack 알림 전송 직전")
-        print(f"slack_notifier 객체 존재: {slack_notifier is not None}")
-        
-        notification_result = slack_notifier.notify_new_notice(title, created_by)
-        print(f"알림 전송 결과: {notification_result}")
-        
-        return jsonify({"success": True, "message": "공지사항이 추가되었습니다."}), 201
-    except Exception as e:
-        print(f"오류 발생: {str(e)}")
-        return jsonify({"success": False, "message": f"공지사항 추가 실패: {str(e)}"}), 500
 
 @notices_bp.route('/notices/<int:notice_id>', methods=['PUT'])
 def update_notice(notice_id):
