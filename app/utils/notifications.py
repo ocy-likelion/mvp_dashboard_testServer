@@ -9,6 +9,7 @@ class SlackNotifier:
         load_dotenv()  # 환경 변수 명시적 로딩
         self.logger = logging.getLogger(__name__)
         self.webhooks: Dict[str, str] = {
+            'notice': os.getenv('SLACK_WEBHOOK_URL'),  # 공지사항용 웹훅 추가
             'issue': os.getenv('SLACK_WEBHOOK_URL_ISSUE'),  # 이슈 등록용 웹훅
             'comment': os.getenv('SLACK_WEBHOOK_URL_COMMENT'),  # 댓글용 웹훅
             'default': os.getenv('SLACK_WEBHOOK_URL')  # 기본 웹훅 (기존 URL)
@@ -60,7 +61,7 @@ class SlackNotifier:
 • 작성자: {author}
 • 제목: {title}
 """
-        return self.send_notification(message, 'notice')
+        return self.send_notification(message, 'default')
 
     def notify_new_issue(self, issue, author, training_course):
         message = f"""
