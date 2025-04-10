@@ -46,17 +46,19 @@ class SlackNotifier:
 """
         return self.send_notification(message)
 
-    def notify_new_issue(self, title, author):
+    def notify_new_issue(self, issue, author, training_course):
         message = f"""
 ⚠️ *새로운 이슈가 등록되었습니다!*
+• 교육과정: {training_course}
 • 작성자: {author}
-• 제목: {title}
+• 내용: {issue}
 """
         return self.send_notification(message)
 
-    def notify_new_comment(self, issue_title, author):
+    def notify_new_comment(self, issue_title, author, training_course):
         message = f"""
 💬 *새로운 댓글이 등록되었습니다!*
+• 교육과정: {training_course}
 • 이슈: {issue_title}
 • 작성자: {author}
 """
