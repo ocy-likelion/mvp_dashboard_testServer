@@ -1,16 +1,24 @@
+import logging
+import sys
 from flask import Flask
 from flask_cors import CORS
 from flasgger import Swagger
 from datetime import timedelta
-import logging
-
-# 로깅 설정
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 
 def create_app():
+    # 로깅 설정을 가장 먼저
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.StreamHandler(sys.stderr)
+        ]
+    )
+    
+    logger = logging.getLogger(__name__)
+    logger.info("애플리케이션 시작")
+    
     app = Flask(__name__, template_folder='templates')
     app.secret_key = 'your-secret-key'  # 실제 운영 환경에서는 안전한 난수를 사용하세요.
 

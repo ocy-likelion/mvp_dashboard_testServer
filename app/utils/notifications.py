@@ -4,13 +4,15 @@ import logging
 
 class SlackNotifier:
     def __init__(self):
+        self.logger = logging.getLogger(__name__)
         self.webhook_url = os.getenv('SLACK_WEBHOOK_URL')
         self.channel = os.getenv('SLACK_CHANNEL', '#생산성제고_tf')
+        self.logger.info(f"SlackNotifier 초기화: channel={self.channel}")
         
     def send_notification(self, message):
-        logging.info("Slack 알림 전송 시작")
+        print("Slack 알림 전송 시작")
         if not self.webhook_url:
-            logging.error(f"SLACK_WEBHOOK_URL이 설정되지 않았습니다. webhook_url: {self.webhook_url}")
+            print(f"SLACK_WEBHOOK_URL이 설정되지 않음: {self.webhook_url}")
             return False
             
         try:
@@ -21,18 +23,18 @@ class SlackNotifier:
                 "icon_emoji": ":lion_face:"     # 봇 아이콘 설정
             }
             
-            logging.info(f"Slack webhook 요청 전송 - Channel: {self.channel}")
+            print(f"Webhook 요청 전송 - Channel: {self.channel}")
             response = requests.post(self.webhook_url, json=payload)
-            logging.info(f"Slack 응답 수신 - Status: {response.status_code}")
+            print(f"응답 상태 코드: {response.status_code}")
             
             if response.status_code == 200:
-                logging.info("Slack 알림 전송 성공")
+                print("Webhook 요청 성공")
                 return True
             else:
-                logging.error(f"Slack 알림 전송 실패 - Status: {response.status_code}, Response: {response.text}")
+                print(f"Webhook 요청 실패: {response.text}")
                 return False
         except Exception as e:
-            logging.error(f"Slack 알림 전송 중 예외 발생: {str(e)}", exc_info=True)
+            print(f"알림 전송 중 오류 발생: {str(e)}")
             return False
 
     def notify_new_notice(self, title, author):

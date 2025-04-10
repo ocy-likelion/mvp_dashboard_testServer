@@ -5,7 +5,14 @@ from app.models.db import get_db_connection
 from app.utils.notifications import SlackNotifier
 
 notices_bp = Blueprint('notices', __name__)
-slack_notifier = SlackNotifier()
+logger = logging.getLogger(__name__)
+
+# SlackNotifier 인스턴스 생성 시 로깅 추가
+try:
+    slack_notifier = SlackNotifier()
+    logger.info("SlackNotifier 인스턴스 생성 성공")
+except Exception as e:
+    logger.error(f"SlackNotifier 인스턴스 생성 실패: {str(e)}")
 
 @notices_bp.route('/notices', methods=['GET'])
 def get_notices():
@@ -89,11 +96,19 @@ def add_notice():
         description: 서버 오류 발생
     """
     try:
+        # 시작 로그
+        print("공지사항 추가 API 호출됨")  # print문 추가
+        logger.info("공지사항 추가 API 호출됨")
+        
         data = request.json
         title = data.get("title")
         content = data.get("content")
         created_by = data.get("username")
         notice_type = data.get("type", "공지사항")
+
+        # 데이터 로깅
+        print(f"받은 데이터: title={title}, created_by={created_by}")  # print문 추가
+        logger.info(f"받은 데이터: title={title}, created_by={created_by}")
 
         if not title or not content or not created_by:
             return jsonify({"success": False, "message": "제목, 내용, 작성자를 모두 입력하세요."}), 400
@@ -110,6 +125,11 @@ def add_notice():
 
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # DB 작업 전 로깅
+        print("데이터베이스 작업 시작")  # print문 추가
+        logger.info("데이터베이스 작업 시작")
+
         cursor.execute('''
             INSERT INTO notices (title, content, date, created_by, type)
             VALUES (%s, %s, %s, %s, %s)
@@ -120,21 +140,28 @@ def add_notice():
         conn.close()
 
         # 여기에 로깅 추가
-        logging.info(f"공지사항 등록 시도 - 제목: {title}, 작성자: {created_by}")
+        logger.info(f"공지사항 등록 시도 - 제목: {title}, 작성자: {created_by}")
         
-        # Slack 알림 전송
+        # Slack 알림 전송 시도
+        print("Slack 알림 전송 시도")  # print문 추가
+        logger.info("Slack 알림 전송 시도")
+        
         try:
             notification_sent = slack_notifier.notify_new_notice(title, created_by)
             if notification_sent:
-                logging.info("Slack 알림 전송 성공")
+                print("Slack 알림 전송 성공")  # print문 추가
+                logger.info("Slack 알림 전송 성공")
             else:
-                logging.error("Slack 알림 전송 실패")
+                print("Slack 알림 전송 실패")  # print문 추가
+                logger.error("Slack 알림 전송 실패")
         except Exception as e:
-            logging.error(f"Slack 알림 전송 중 오류 발생: {str(e)}", exc_info=True)
+            print(f"Slack 알림 전송 중 오류: {str(e)}")  # print문 추가
+            logger.error(f"Slack 알림 전송 중 오류: {str(e)}", exc_info=True)
 
         return jsonify({"success": True, "message": "공지사항이 추가되었습니다."}), 201
     except Exception as e:
-        logging.error("공지사항 추가 오류", exc_info=True)
+        print(f"공지사항 추가 중 오류: {str(e)}")  # print문 추가
+        logger.error("공지사항 추가 중 오류", exc_info=True)
         return jsonify({"success": False, "message": "공지사항 추가 실패"}), 500
 
 @notices_bp.route('/notices/<int:notice_id>', methods=['PUT'])
