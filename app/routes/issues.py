@@ -47,9 +47,9 @@ def add_issue():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # 이슈 저장
+        # 'issue' 대신 'content' 컬럼 사용
         cursor.execute('''
-            INSERT INTO issues (issue, training_course, date, created_by)
+            INSERT INTO issues (content, training_course, date, created_by)
             VALUES (%s, %s, %s, %s)
             RETURNING id
         ''', (issue, training_course, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), created_by))
@@ -147,9 +147,9 @@ def add_comment():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # 먼저 이슈 정보 조회
+        # 이슈 정보 조회 시 'issue' 대신 'content' 사용
         cursor.execute('''
-            SELECT issue, training_course FROM issues WHERE id = %s
+            SELECT content, training_course FROM issues WHERE id = %s
         ''', (issue_id,))
         issue_info = cursor.fetchone()
         
@@ -172,7 +172,7 @@ def add_comment():
         try:
             notifier = SlackNotifier()
             notification_sent = notifier.notify_new_comment(
-                issue_title=issue_info[0],
+                issue_title=issue_info[0],  # content 컬럼의 값
                 author=created_by,
                 training_course=issue_info[1]
             )
