@@ -5,7 +5,10 @@ from datetime import timedelta
 import logging
 
 # 로깅 설정
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 def create_app():
     app = Flask(__name__, template_folder='templates')
