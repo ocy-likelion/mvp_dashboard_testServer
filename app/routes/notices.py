@@ -3,6 +3,7 @@ from datetime import datetime
 import logging
 from app.models.db import get_db_connection
 from app.utils.notifications import SlackNotifier
+import os
 
 notices_bp = Blueprint('notices', __name__)
 logger = logging.getLogger(__name__)
@@ -96,11 +97,13 @@ def add_notice():
         description: 서버 오류 발생
     """
     try:
-        # 시작 로그
-        print("공지사항 추가 API 호출됨")  # print문 추가
-        logger.info("공지사항 추가 API 호출됨")
+        # 환경 변수 확인
+        print(f"SLACK_WEBHOOK_URL: {os.getenv('SLACK_WEBHOOK_URL')}")
+        print(f"SLACK_CHANNEL: {os.getenv('SLACK_CHANNEL')}")
         
         data = request.json
+        print(f"받은 데이터: {data}")  # 전체 요청 데이터 출력
+        
         title = data.get("title")
         content = data.get("content")
         created_by = data.get("username")
@@ -142,27 +145,17 @@ def add_notice():
         # 여기에 로깅 추가
         logger.info(f"공지사항 등록 시도 - 제목: {title}, 작성자: {created_by}")
         
-        # Slack 알림 전송 시도
-        print("Slack 알림 전송 시도")  # print문 추가
-        logger.info("Slack 알림 전송 시도")
+        # Slack 알림 전송 시도 전 상태 확인
+        print("Slack 알림 전송 직전")
+        print(f"slack_notifier 객체 존재: {slack_notifier is not None}")
         
-        try:
-            notification_sent = slack_notifier.notify_new_notice(title, created_by)
-            if notification_sent:
-                print("Slack 알림 전송 성공")  # print문 추가
-                logger.info("Slack 알림 전송 성공")
-            else:
-                print("Slack 알림 전송 실패")  # print문 추가
-                logger.error("Slack 알림 전송 실패")
-        except Exception as e:
-            print(f"Slack 알림 전송 중 오류: {str(e)}")  # print문 추가
-            logger.error(f"Slack 알림 전송 중 오류: {str(e)}", exc_info=True)
-
+        notification_result = slack_notifier.notify_new_notice(title, created_by)
+        print(f"알림 전송 결과: {notification_result}")
+        
         return jsonify({"success": True, "message": "공지사항이 추가되었습니다."}), 201
     except Exception as e:
-        print(f"공지사항 추가 중 오류: {str(e)}")  # print문 추가
-        logger.error("공지사항 추가 중 오류", exc_info=True)
-        return jsonify({"success": False, "message": "공지사항 추가 실패"}), 500
+        print(f"오류 발생: {str(e)}")
+        return jsonify({"success": False, "message": f"공지사항 추가 실패: {str(e)}"}), 500
 
 @notices_bp.route('/notices/<int:notice_id>', methods=['PUT'])
 def update_notice(notice_id):

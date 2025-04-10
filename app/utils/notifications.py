@@ -1,12 +1,21 @@
+from dotenv import load_dotenv
 import requests
 import os
 import logging
 
 class SlackNotifier:
     def __init__(self):
+        load_dotenv()  # 환경 변수 명시적 로딩
         self.logger = logging.getLogger(__name__)
         self.webhook_url = os.getenv('SLACK_WEBHOOK_URL')
-        self.channel = os.getenv('SLACK_CHANNEL', '#생산성제고_tf')
+        self.channel = os.getenv('SLACK_CHANNEL')
+        
+        # 초기화 시 환경 변수 확인
+        if not self.webhook_url:
+            print("ERROR: SLACK_WEBHOOK_URL이 설정되지 않았습니다!")
+        if not self.channel:
+            print("ERROR: SLACK_CHANNEL이 설정되지 않았습니다!")
+        
         self.logger.info(f"SlackNotifier 초기화: channel={self.channel}")
         
     def send_notification(self, message):
