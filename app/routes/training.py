@@ -171,11 +171,26 @@ def get_unchecked_descriptions():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # training_info 테이블을 조인하여 dept 정보 포함
+        # task_items 테이블을 조인하여 due 정보 포함
         cursor.execute('''
-            SELECT ud.id, ud.content, ud.action_plan, ud.training_course, ti.dept, ud.created_at, ud.resolved
+            SELECT 
+                ud.id, 
+                ud.content, 
+                ud.action_plan, 
+                ud.training_course, 
+                ti.dept, 
+                ud.created_at, 
+                ud.resolved,
+                ti2.due,  -- 해결 기한 추가
+                (ud.created_at + (ti2.due || ' days')::interval)::date as deadline,  -- 마감일 계산
+                CASE 
+                    WHEN CURRENT_DATE > (ud.created_at + (ti2.due || ' days')::interval)::date 
+                    THEN TRUE 
+                    ELSE FALSE 
+                END as is_overdue  -- 기한 초과 여부
             FROM unchecked_descriptions ud
             JOIN training_info ti ON ud.training_course = ti.training_course
+            JOIN task_items ti2 ON ud.content = ti2.content  -- task_items 테이블과 조인
             WHERE ud.resolved = FALSE  
             ORDER BY ud.created_at DESC;
         ''')
@@ -189,12 +204,15 @@ def get_unchecked_descriptions():
             "data": [
                 {
                     "id": row[0],
-                    "content": row[1],  # 항목 설명
-                    "action_plan": row[2],  # 액션 플랜
+                    "content": row[1],
+                    "action_plan": row[2],
                     "training_course": row[3],
-                    "dept": row[4],  # 부서명 추가
+                    "dept": row[4],
                     "created_at": row[5],
-                    "resolved": row[6]
+                    "resolved": row[6],
+                    "due_days": row[7],  # 설정된 해결 기한(일)
+                    "deadline": row[8],   # 실제 마감일
+                    "is_overdue": row[9]  # 기한 초과 여부
                 } for row in unchecked_items
             ]
         }), 200
