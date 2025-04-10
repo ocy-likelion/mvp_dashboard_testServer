@@ -171,7 +171,6 @@ def get_unchecked_descriptions():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # task_items 테이블을 조인하여 due 정보 포함
         cursor.execute('''
             SELECT 
                 ud.id, 
@@ -190,7 +189,7 @@ def get_unchecked_descriptions():
                 END as is_overdue  -- 기한 초과 여부
             FROM unchecked_descriptions ud
             JOIN training_info ti ON ud.training_course = ti.training_course
-            JOIN task_items ti2 ON ud.content = ti2.content  -- task_items 테이블과 조인
+            JOIN task_items ti2 ON ud.content = ti2.task_name  -- content를 task_name으로 변경
             WHERE ud.resolved = FALSE  
             ORDER BY ud.created_at DESC;
         ''')
