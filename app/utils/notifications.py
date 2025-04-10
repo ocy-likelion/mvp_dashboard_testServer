@@ -8,8 +8,8 @@ class SlackNotifier:
         load_dotenv()  # 환경 변수 명시적 로딩
         self.logger = logging.getLogger(__name__)
         self.webhook_url = os.getenv('SLACK_WEBHOOK_URL')
-        self.notice_channel = os.getenv('SLACK_CHANNEL', '#생산성제고_tf')  # 공지사항용 채널
-        self.issue_channel = os.getenv('SLACK_ISSUE_CHANNEL', '#박세은(Seeun PARK), 최갑주(Gapju CHOI)')  # 이슈용 채널
+        self.notice_channel = os.getenv('SLACK_CHANNEL', 'C08J05328D7')  # 공지사항용 채널
+        self.issue_channel = os.getenv('SLACK_ISSUE_CHANNEL', 'C08LASRA397')  # 이슈용 채널
         
         # 초기화 시 환경 변수 확인
         if not self.webhook_url:
