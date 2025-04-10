@@ -62,7 +62,7 @@ def add_issue():
         # 이슈 등록 알림
         notifier = SlackNotifier()
         notification_message = f"새로운 이슈가 등록되었습니다!\n과정명: {training_course}\n이슈: {issue}"
-        notifier.send_notification(notification_message, channel='issue')
+        notifier.send_notification(notification_message, channel_type='issue')
 
         return jsonify({"success": True, "message": "이슈가 등록되었습니다.", "id": issue_id}), 201
     except Exception as e:
@@ -165,7 +165,7 @@ def add_comment():
         # 댓글 등록 알림
         notifier = SlackNotifier()
         notification_message = f"이슈에 새로운 댓글이 등록되었습니다!\n과정명: {issue_info[1]}\n댓글: {comment}"
-        notifier.send_notification(notification_message, channel='comment')
+        notifier.send_notification(notification_message, channel_type='comment')
 
         return jsonify({"success": True, "message": "댓글이 등록되었습니다."}), 201
     except Exception as e:

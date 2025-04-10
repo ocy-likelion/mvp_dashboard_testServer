@@ -41,18 +41,12 @@ def add_notice():
         cursor.close()
         conn.close()
 
-        # Slack 알림 전송 (여기서 인스턴스 생성)
-        try:
-            notifier = SlackNotifier()
-            notification_sent = notifier.notify_new_notice(title, created_by)
-            if notification_sent:
-                logger.info("Slack 알림 전송 성공")
-            else:
-                logger.error("Slack 알림 전송 실패")
-        except Exception as e:
-            logger.error(f"Slack 알림 전송 중 오류: {str(e)}")
+        # Slack 알림 전송 (channel -> channel_type으로 수정)
+        notifier = SlackNotifier()
+        notification_message = f"새로운 공지사항이 등록되었습니다!\n제목: {title}\n작성자: {created_by}"
+        notifier.send_notification(notification_message, channel_type='notice')
 
-        return jsonify({"success": True, "message": "공지사항이 추가되었습니다."}), 201
+        return jsonify({"success": True, "message": "공지사항이 저장되었습니다!"}), 201
     except Exception as e:
         logger.error(f"공지사항 추가 중 오류: {str(e)}")
         return jsonify({"success": False, "message": "공지사항 추가 실패"}), 500
