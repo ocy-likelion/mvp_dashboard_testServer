@@ -8,34 +8,43 @@ class SlackNotifier:
         load_dotenv()  # 환경 변수 명시적 로딩
         self.logger = logging.getLogger(__name__)
         self.webhook_url = os.getenv('SLACK_WEBHOOK_URL')
-        self.channel = os.getenv('SLACK_CHANNEL')
+        self.notice_channel = os.getenv('SLACK_CHANNEL', '#생산성제고_tf')  # 공지사항용 채널
+        self.issue_channel = os.getenv('SLACK_ISSUE_CHANNEL', '#박세은(Seeun PARK), 최갑주(Gapju CHOI)')  # 이슈용 채널
         
         # 초기화 시 환경 변수 확인
         if not self.webhook_url:
             print("ERROR: SLACK_WEBHOOK_URL이 설정되지 않았습니다!")
-        if not self.channel:
+        if not self.notice_channel:
             print("ERROR: SLACK_CHANNEL이 설정되지 않았습니다!")
+        if not self.issue_channel:
+            print("ERROR: SLACK_ISSUE_CHANNEL이 설정되지 않았습니다!")
         
-        self.logger.info(f"SlackNotifier 초기화: channel={self.channel}")
+        self.logger.info(f"SlackNotifier 초기화: notice_channel={self.notice_channel}, issue_channel={self.issue_channel}")
         
-    def send_notification(self, message):
+    def send_notification(self, message, channel):
         try:
             if not self.webhook_url:
-                print(f"Webhook URL이 없습니다: {os.getenv('SLACK_WEBHOOK_URL')}")
+                logging.error("SLACK_WEBHOOK_URL이 설정되지 않았습니다.")
                 return False
-
+                
             payload = {
-                "channel": self.channel,
-                "text": message
+                "channel": channel,
+                "text": message,
+                "username": "Lion Helper Bot",
+                "icon_emoji": ":lion_face:"
             }
-
-            print(f"Slack 알림 전송 시도: {payload}")
+            
+            logging.info(f"Slack 알림 전송 시도 - Channel: {channel}")
             response = requests.post(self.webhook_url, json=payload)
-            print(f"Slack 응답: {response.status_code} - {response.text}")
-
-            return response.status_code == 200
+            
+            if response.status_code == 200:
+                logging.info(f"Slack 알림 전송 성공 - Channel: {channel}")
+                return True
+            else:
+                logging.error(f"Slack 알림 전송 실패: {response.status_code}, {response.text}")
+                return False
         except Exception as e:
-            print(f"Slack 알림 전송 중 오류: {str(e)}")
+            logging.error(f"Slack 알림 전송 중 오류 발생: {str(e)}")
             return False
 
     def notify_new_notice(self, title, author):
@@ -44,7 +53,7 @@ class SlackNotifier:
 • 작성자: {author}
 • 제목: {title}
 """
-        return self.send_notification(message)
+        return self.send_notification(message, self.notice_channel)
 
     def notify_new_issue(self, issue, author, training_course):
         message = f"""
@@ -53,7 +62,7 @@ class SlackNotifier:
 • 작성자: {author}
 • 내용: {issue}
 """
-        return self.send_notification(message)
+        return self.send_notification(message, self.issue_channel)
 
     def notify_new_comment(self, issue_title, author, training_course):
         message = f"""
@@ -62,4 +71,4 @@ class SlackNotifier:
 • 이슈: {issue_title}
 • 작성자: {author}
 """
-        return self.send_notification(message)
+        return self.send_notification(message, self.issue_channel)
